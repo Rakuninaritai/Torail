@@ -1,7 +1,2 @@
-"# Torail" 
-"## ŠT—v" 
-"TorailiƒgƒŒƒCƒ‹j‚ÍAƒvƒƒOƒ‰ƒ~ƒ“ƒOŠwK‹L˜^ƒAƒvƒŠ‚Å‚·B" 
-"## ‹@”\" 
-"- ŠwK‹L˜^‚ÌŠÇ—" 
-"- “Œvƒf[ƒ^‚Ì‰ÂŽ‹‰»" 
-"- ƒ†[ƒU[‚²‚Æ‚Ìi’»•ªÍ" 
+Torailã§ã™
+æœ€é«˜ãªã‚µãƒ¼ãƒ“ã‚¹ã§ã™ã‚ˆãŠ 

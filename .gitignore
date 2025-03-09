@@ -1,5 +1,46 @@
-"__pycache__/" 
-"*.pyc" 
-".env" 
-"*/migrations/*.py"
-"*/migrations/*.pyc"
+# ---- Python ----
+#、、、/はそのフォルダと子を無視、*.はその拡張子を無視
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+
+# ---- Byte-compiled / optimized / DLL files ----
+*.pyc
+*.pyd
+*.pyo
+
+# ---- Virtual environments ----
+env/
+venv/
+.venv/
+ENV/
+venv.bak/
+
+# ---- Django ----
+*.log
+
+# ---- SQLite database ----
+db.sqlite3
+
+# ---- Environment / Secrets ----
+*.env               
+
+# ---- Migrations (※通常は管理対象に含めるのでオフにする場合のみ) ----
+# migrationsフォルダ内の~~pyとpycを無視
+*/migrations/*.py
+*/migrations/*.pyc
+
+
+# ---- OS / IDE / Editor files ----
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ---- staticfiles(runserver毎に作ってしまうので) ----
+staticfiles/
+
+media/
