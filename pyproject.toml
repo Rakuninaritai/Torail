@@ -1,0 +1,5 @@
+[project]
+name = "torail"
+version = "0.1.0"
+description = "Torail Django App"
+dependencies = []
