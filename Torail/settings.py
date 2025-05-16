@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -37,10 +38,22 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    'rest_framework',  # Django REST Framework（API用）
+    'rest_framework.authtoken',#ログイン後はトークンを持たせるがそのとき用
+    ###ソーシャルログイン用アカウント周り
+    'django.contrib.sites',  # 必須：allauthのため
+    'allauth',#djangoallauthの機能
+    'allauth.account',#ユーザーのアカウント管理向け
+    'allauth.socialaccount',  # ソーシャルログインを後から追加する場合に必要
+    'dj_rest_auth',#ログインログアウトのエンドポイントを提供
+    'dj_rest_auth.registration',#ユーザー登録用のエンドポイント用
+    ###
     "main",
+    "corsheaders"#djangoがフロント(react)のアクセスを許可するよう
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # CORSミドルウェアを追加(フロントとの連携でいる)
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -48,7 +61,20 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # djangoallauthでのログインログアウト管理用
+    'allauth.account.middleware.AccountMiddleware',
 ]
+CORS_ALLOW_ALL_ORIGINS = True  # 全てのフロントエンドからのリクエストを許可（開発用）
+# django-allauth用
+SITE_ID=1
+# allauth用の設定達
+# メールアドレスの検証(メール確認リンク)をnone(本番mandatory)(送られてくるメールを踏んで初めて登録できるようになる)
+ACCOUNT_EMAIL_VERIFICATION = 'none'
+# アカウントに認証はユーザー名で行う
+ACCOUNT_LOGIN_METHODS = {'username'}   # または 'email'
+# メルアドの登録は必須とする
+ACCOUNT_EMAIL_REQUIRED = True
+
 
 ROOT_URLCONF = "Torail.urls"
 
@@ -106,7 +132,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "ja"
 
-TIME_ZONE = "JTC"
+TIME_ZONE = "Asia/tokyo"
 
 USE_I18N = True
 
@@ -134,4 +160,15 @@ REST_FRAMEWORK = {
         # ↓JWTによる認証
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+}
+
+# 認証の設定
+SIMPLE_JWT={
+    #   アクセストークンは1日で切れるが7daysはリフレッシュトークンで別のアクトーが取得できログインなしで行ける
+    'ACCESS_TOKEN_LIFETIME':timedelta(days=1),#アクセストークンの有効期限(1日)
+    'REFRESH_TOKEN_LIFETIME':timedelta(days=7),#リフレッシュトークンの有効期限(7日),
+    # リフトーを使って更新した場合、リフトーの使いまわしは不可
+    'ROTATE_REFRESH_TOKENS':True,
+    # 一度使ったリフトーはブラックリスト行
+    'BLACKLIST_AFTER_ROTATION':True
 }

@@ -1,0 +1,119 @@
+<!--
+  Record Detail / Edit (readonly‑first)
+  -------------------------------------------------
+  * 同一レイアウトで「最初は入力 disabled」
+  * Edit ボタンで disabled → false, Save で true に戻す。
+  * サイドバー・レスポンシブ設定は前バージョンと同じ。
+-->
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>記録詳細 / 編集</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+      :root {
+        --sidebar-bg:#0d1117;--sidebar-text:#c9d1d9;--sidebar-hover:#30363d;
+        --main-bg:#fff;--main-text:#24292e;--primary:#238636;--card-shadow:0 1px 3px rgba(27,31,35,.1)
+      }
+      body,html{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif}
+      body{display:flex;background:var(--main-bg);color:var(--main-text)}
+      .sidebar{width:240px;background:var(--sidebar-bg);display:flex;flex-direction:column}
+      .sidebar .logo{padding:1.5rem;text-align:center}
+      .sidebar .logo img{max-width:100%}
+      .nav-link{color:var(--sidebar-text);padding:.75rem 1rem;border-radius:4px}
+      .nav-link:hover,.nav-link.active{background:var(--sidebar-hover);color:#fff}
+      .detail-wrapper{flex:1;overflow-y:auto;padding:2rem}
+      @media (max-width:767px){.detail-wrapper{padding:1rem}}
+      .record-card{box-shadow:var(--card-shadow);border:1px solid #e1e4e8;border-radius:8px;padding:1.5rem;max-width:900px;margin:auto}
+    </style>
+  </head>
+  <body>
+    <nav class="sidebar d-none d-md-flex">
+      <div class="logo"><img src="https://via.placeholder.com/120x40?text=LOGO"/></div>
+      <div class="nav flex-column"><a class="nav-link" href="#">Dashboard</a></div>
+    </nav>
+
+    <main class="detail-wrapper">
+      <div class="record-card">
+        <h2 class="mb-3"><i class="bi bi-journal-text"></i> 学習記録 詳細</h2>
+        <form id="recordForm">
+          <div class="row g-3 mb-3">
+            <div class="col-md">
+              <label class="form-label">科目</label>
+              <input type="text" class="form-control" value="数学" disabled name="subject" />
+            </div>
+            <div class="col-md">
+              <label class="form-label">課題</label>
+              <input type="text" class="form-control" value="微分演習" disabled name="task" />
+            </div>
+            <div class="col-md">
+              <label class="form-label">言語</label>
+              <input type="text" class="form-control" value="Python" disabled name="language" />
+            </div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label class="form-label">学習時間 (h)</label>
+              <input type="number" step="0.1" class="form-control" value="1.5" disabled name="hours" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">日付</label>
+              <input type="date" class="form-control" value="2025-05-15" disabled name="date" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">開始時刻</label>
+              <input type="time" class="form-control" value="09:00" disabled name="start" />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">メモ</label>
+            <textarea rows="3" class="form-control" disabled name="memo">チェインルール復習</textarea>
+          </div>
+          <!-- アクションボタン -->
+          <div class="d-flex gap-2 justify-content-end">
+            <button type="button" id="editBtn" class="btn btn-outline-primary">
+              <i class="bi bi-pencil"></i> 編集
+            </button>
+            <button type="submit" id="saveBtn" class="btn btn-success d-none">
+              <i class="bi bi-save"></i> 保存
+            </button>
+            <button type="button" id="cancelBtn" class="btn btn-secondary d-none">キャンセル</button>
+          </div>
+        </form>
+      </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // 初期状態: 全 input/textarea は disabled
+      const form   = document.getElementById('recordForm');
+      const inputs = form.querySelectorAll('input, textarea');
+      const editBtn   = document.getElementById('editBtn');
+      const saveBtn   = document.getElementById('saveBtn');
+      const cancelBtn = document.getElementById('cancelBtn');
+
+      function toggleEdit(on) {
+        inputs.forEach(el => (el.disabled = !on));
+        editBtn.classList.toggle('d-none', on);
+        saveBtn.classList.toggle('d-none', !on);
+        cancelBtn.classList.toggle('d-none', !on);
+      }
+
+      editBtn.addEventListener('click', () => toggleEdit(true));
+
+      cancelBtn.addEventListener('click', () => {
+        form.reset();          // 値を元に戻す (モック)
+        toggleEdit(false);
+      });
+
+      form.addEventListener('submit', e => {
+        e.preventDefault();    // TODO: fetch PUT API など
+        alert('保存しました (モック)');
+        toggleEdit(false);
+      });
+    </script>
+  </body>
+</html>

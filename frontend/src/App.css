@@ -1,0 +1,146 @@
+:root {
+  --sidebar-bg: #0d1117;
+  --sidebar-text: #c9d1d9;
+  --sidebar-hover: #30363d;
+  --main-bg: #ffffff;
+  --main-text: #24292e;
+  --primary: #238636;
+  --secondary: #57606a;
+  --card-shadow: 0 1px 3px rgba(27,31,35,0.1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body,
+html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+body {
+  /* display: flex; */
+  background: var(--main-bg);
+  color: var(--main-text);
+}
+
+/* Sidebar */
+.sidebar {
+  width: 240px;
+  background: var(--sidebar-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar .logo {
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.sidebar .logo img {
+  max-width: 100%;
+  height: auto;
+}
+
+.nav-link {
+  color: var(--sidebar-text);
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  background: var(--sidebar-hover);
+  color: #fff;
+}
+
+.nav {
+  flex-grow: 1;
+}
+
+.mt-auto {
+  margin-top: auto !important;
+}
+
+/* Main */
+main {
+  flex: 1;
+  overflow-y: auto;
+  /* pading効いてないかも */
+  padding: 2rem;
+  background: var(--main-bg);
+}
+
+@media (max-width: 767px) {
+  main {
+    padding: 1rem;
+  }
+  .timer-card,
+  .stats-card {
+    margin: 0 -1rem;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+h1 {
+  font-size: 1.75rem;
+  margin-bottom: 1rem;
+}
+
+/* Timer Card */
+.timer-card {
+  max-width: 480px;
+  width: 100%;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  border: 1px solid #e1e4e8;
+  border-radius: 8px;
+  box-shadow: var(--card-shadow);
+}
+
+#timerDisplay {
+  font-family: monospace;
+  font-size: 3rem;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.btn-primary {
+  background: var(--primary);
+  border: none;
+}
+
+.btn-primary:hover {
+  background: #279f48;
+}
+
+.btn-secondary {
+  background: var(--secondary);
+  border: none;
+}
+
+/* Table */
+.table-responsive {
+  margin-top: 1rem;
+  box-shadow: var(--card-shadow);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Stats Card */
+.stats-card {
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: var(--card-shadow);
+  border: 1px solid #e1e4e8;
+}
+
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 300px;
+}
