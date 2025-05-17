@@ -153,6 +153,16 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"   # collectstatic で出力される場所
+STATICFILES_DIRS = [
+    BASE_DIR / "frontend" / "dist",   # ← 追加
+]
+
+# 追加パッケージ
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    }
+}
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
@@ -182,16 +192,5 @@ SIMPLE_JWT={
     'BLACKLIST_AFTER_ROTATION':True
 }
 
-# settings.py
-STATIC_URL  = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [
-    BASE_DIR / "frontend" / "dist",   # ← 追加
-]
-
-# 追加パッケージ
-STORAGES = {
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    }
-}
+# WhiteNoise が開発時にオートリロードする用
+WHITENOISE_AUTOREFRESH = DEBUG
