@@ -156,7 +156,9 @@ TEMPLATES[0]["DIRS"] = [ BASE_DIR / "templates" ]
 
 STATIC_URL  = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [ BASE_DIR / "static/react" ]   # ← Dockerfile で配置
+STATICFILES_DIRS = [
+    BASE_DIR / "static",          # ← static/react がこの下にある
+]
 
 # 追加パッケージ
 STORAGES = {

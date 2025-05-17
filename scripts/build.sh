@@ -1,17 +1,16 @@
+# scripts/build.sh
 #!/usr/bin/env bash
 set -e
 
-# ---------- React ----------
-npm ci --prefix frontend
-npm run build --prefix frontend     # → frontend/dist/
+# ❶ React build
+npm ci          --prefix frontend
+npm run build   --prefix frontend          # → frontend/dist 生成
 
-# ---------- テンプレート配置 ----------
-mkdir -p templates
-cp frontend/dist/index.html templates/
+# ❷ copy to Django
+mkdir -p templates static/react
+cp  frontend/dist/index.html        templates/
+cp -r frontend/dist/assets/*        static/react/
 
-# （アセットは WhiteNoise で配信する）
-mkdir -p static/react
-cp -r frontend/dist/assets/* static/react/
-
-# ---------- Django ----------
+# ❸ Django collectstatic & migrate
 python manage.py collectstatic --noinput
+python manage.py migrate
