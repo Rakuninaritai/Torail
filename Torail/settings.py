@@ -185,6 +185,9 @@ SIMPLE_JWT={
 # settings.py
 STATIC_URL  = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [
+    BASE_DIR / "frontend" / "dist",   # ← 追加
+]
 
 # 追加パッケージ
 STORAGES = {
