@@ -54,9 +54,8 @@ from django.urls import path, re_path, include
 # 1サービス500エラー対応
 # ---- 最後に SPA fallback ----
 def spa(request):
-    """どのパスでも React の index.html をそのまま返す"""
-    index_file = Path(__file__).resolve().parent / "frontend" / "dist" / "index.html"
-    return FileResponse(open(index_file, "rb"), content_type="text/html")
+    index = Path(__file__).resolve().parent / "frontend" / "dist" / "index.html"
+    return FileResponse(open(index, "rb"), content_type="text/html")
 
 urlpatterns += [
     re_path(r"^(?!static/).*$", spa),  # /static/ を除く全て
