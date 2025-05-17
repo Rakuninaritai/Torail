@@ -160,12 +160,6 @@ STATICFILES_DIRS = [
     BASE_DIR / "static",          # ← static/react がこの下にある
 ]
 
-# 追加パッケージ
-STORAGES = {
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    }
-}
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 

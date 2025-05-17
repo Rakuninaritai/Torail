@@ -1,12 +1,12 @@
-# ── 1) ビルド専用ステージで React をビルド ─────────────────────
+### ---------- ① React をビルドするステージ ----------
 FROM node:20-alpine AS frontend
 WORKDIR /frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend .
-RUN npm run build        # → /frontend/dist に生成
+RUN npm run build            # → /frontend/dist に生成
 
-# ── 2) 本番イメージ (Python) ─────────────────────────────────────
+### ---------- ② 本番 Python イメージ ----------
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -17,16 +17,15 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# アプリケーションコード
+# Django プロジェクト
 COPY . .
 
-# React の成果物を Django が拾える場所へ
-COPY --from=frontend /frontend/dist /app/static/react
+# React の成果物を Django が見る場所へ
+COPY --from=frontend /frontend/dist/index.html           ./templates/index.html
+COPY --from=frontend /frontend/dist/assets               ./static/
 
-# ここで collectstatic
+# collectstatic
 RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
-# ⭐ ここを CMD（exec 形式）にする
 CMD ["gunicorn", "Torail.wsgi", "--bind", "0.0.0.0:8000"]
-# 

@@ -49,16 +49,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
 ]
 
-from pathlib import Path
-from django.http import FileResponse, Http404
-BASE_DIR = Path(__file__).resolve().parent.parent  # => /app
-def spa(request):
-    index = BASE_DIR / "templates" / "index.html"
-    if not index.exists():
-        raise Http404("index.html not found")
-    return FileResponse(index.open("rb"), content_type="text/html")
-
-urlpatterns = [
-    # API や admin …
-    re_path(r"^(?!static/).*", spa),   # どの URL でも index.html を返す
+# /static/ を除く全 URL → React の index.html
+urlpatterns += [
+    re_path(r"^(?!static/).*", TemplateView.as_view(template_name="index.html")),
 ]
