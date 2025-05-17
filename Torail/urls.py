@@ -50,16 +50,10 @@ urlpatterns = [
 ]
 
 from pathlib import Path
-from django.http import FileResponse
-from django.urls import path, re_path, include
-# 1サービス500エラー対応
-# ---- 最後に SPA fallback ----
-PROJECT_DIR = Path(__file__).resolve().parent   # /app/Torail
+from django.http import FileResponse, Http404
+BASE_DIR = Path(__file__).resolve().parent.parent  # => /app
 def spa(request):
-    # 変更: build スクリプトで置いた場所を指す
-    index = PROJECT_DIR / "templates" / "index.html"     # ← ここを変更
-    return FileResponse(open(index, "rb"), content_type="text/html")
-
-urlpatterns += [
-    re_path(r"^(?!static/).*$", spa),  # /static/ を除く全て
-]
+    index = BASE_DIR / "templates" / "index.html"
+    if not index.exists():
+        raise Http404("index.html not found")
+    return FileResponse(index.open("rb"), content_type="text/html")

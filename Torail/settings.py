@@ -90,7 +90,8 @@ ROOT_URLCONF = "Torail.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+         # ここを追加
+        "DIRS": [ BASE_DIR / "templates" ],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
