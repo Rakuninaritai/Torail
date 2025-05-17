@@ -16,7 +16,7 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include,re_path
 from rest_framework.routers import DefaultRouter
 from main.views import UserViewSet, SubjectViewSet, TaskViewSet, RecordViewSet, LanguageViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
@@ -57,3 +57,8 @@ def spa(request):
     if not index.exists():
         raise Http404("index.html not found")
     return FileResponse(index.open("rb"), content_type="text/html")
+
+urlpatterns = [
+    # API や admin …
+    re_path(r"^(?!static/).*", spa),   # どの URL でも index.html を返す
+]

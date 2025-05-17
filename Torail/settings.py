@@ -152,12 +152,11 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
+TEMPLATES[0]["DIRS"] = [ BASE_DIR / "templates" ]
 
-STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"   # collectstatic で出力される場所
-STATICFILES_DIRS = [
-    BASE_DIR / "frontend" / "dist",   # ← 追加
-]
+STATIC_URL  = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [ BASE_DIR / "static" ] 
 
 # 追加パッケージ
 STORAGES = {
