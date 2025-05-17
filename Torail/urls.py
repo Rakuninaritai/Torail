@@ -21,6 +21,7 @@ from rest_framework.routers import DefaultRouter
 from main.views import UserViewSet, SubjectViewSet, TaskViewSet, RecordViewSet, LanguageViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.views.generic import TemplateView
+from django.conf import settings  
 # urlsではAPIのエンドポイント(URLを決める)
 
 # defaultrouterでCRUDのAPIエンドポイントを自動で作ってくれる(手動でGE,POST等書かなくていい)
@@ -54,7 +55,8 @@ from django.urls import path, re_path, include
 # 1サービス500エラー対応
 # ---- 最後に SPA fallback ----
 def spa(request):
-    index = Path(__file__).resolve().parent / "frontend" / "dist" / "index.html"
+    # 変更: build スクリプトで置いた場所を指す
+    index = settings.BASE_DIR / "templates" / "index.html"
     return FileResponse(open(index, "rb"), content_type="text/html")
 
 urlpatterns += [
