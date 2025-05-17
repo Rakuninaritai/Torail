@@ -2,8 +2,9 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
+import dotenv,  pathlib
 
-
+dotenv.load_dotenv(pathlib.Path(__file__).resolve().parent / ".env")
 def main():
     """Run administrative tasks."""
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Torail.settings")
