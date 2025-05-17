@@ -1,34 +1,31 @@
-# ---------- Stage 1: Frontend build ----------
-FROM node:18-alpine AS frontend
-WORKDIR /app/frontend
-
-# 依存ファイルだけ先にコピーして npm ci キャッシュを活かす
+# ── 1) ビルド専用ステージで React をビルド ─────────────────────
+FROM node:20-alpine AS frontend
+WORKDIR /frontend
 COPY frontend/package*.json ./
 RUN npm ci
+COPY frontend .
+RUN npm run build        # → /frontend/dist に生成
 
-# 残りのフロントコードをコピーしてビルド
-COPY frontend/ .
-RUN npm run build            # → /app/frontend/dist/...
+# ── 2) 本番イメージ (Python) ─────────────────────────────────────
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# ---------- Stage 2: Backend (runtime) ----------
-FROM python:3.12-slim AS backend
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 
-# Python 依存を先に
+# Python 依存
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# プロジェクト全体をコピー
+# アプリケーションコード
 COPY . .
 
-# Stage-1 で生成した React の成果物だけを取り込む
-COPY --from=frontend /app/frontend/dist/index.html   templates/
-COPY --from=frontend /app/frontend/dist/assets/      static/react/
+# React の成果物を Django が拾える場所へ
+COPY --from=frontend /frontend/dist /app/static/react
 
-# Django の準備
-RUN python manage.py collectstatic --noinput && \
-    python manage.py migrate
+# ここで collectstatic
+RUN python manage.py collectstatic --noinput
 
-# ポートは Railway が $PORT を渡してくれる
-CMD ["gunicorn", "Torail.wsgi:application", "--bind", "0.0.0.0:${PORT:-8000}"]
+EXPOSE 8000
+# ⭐ ここを CMD（exec 形式）にする
+CMD ["gunicorn", "Torail.wsgi", "--bind", "0.0.0.0:8000"]
