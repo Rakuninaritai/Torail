@@ -28,7 +28,7 @@ SECRET_KEY = "django-insecure-2d6j*fw3jfplti#=dhw^wf7h68j92ot5m2zin2%pda4m(!7u&_
 DEBUG = False
 
 ALLOWED_HOSTS = [
-    'torail-production.up.railway.app',  # Railway の自動ドメイン
+    'torailback-production.up.railway.app',  # Railway の自動ドメイン
     'torail.app',                        # （将来使う）独自ドメイン
     'localhost',
     '127.0.0.1',
