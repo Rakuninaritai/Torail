@@ -20,6 +20,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from main.views import UserViewSet, SubjectViewSet, TaskViewSet, RecordViewSet, LanguageViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from django.views.generic import TemplateView
 # urlsではAPIのエンドポイント(URLを決める)
 
 # defaultrouterでCRUDのAPIエンドポイントを自動で作ってくれる(手動でGE,POST等書かなくていい)
@@ -33,6 +34,7 @@ router.register(r'languages',LanguageViewSet)
 router.register(r'records',RecordViewSet)
 
 urlpatterns = [
+    path("", TemplateView.as_view(template_name="index.html")),
     # api/ならinclude先を確認
     path("api/", include(router.urls), name=""),
     # ログインしてアクセストークンとリフレッシュトークンを取得

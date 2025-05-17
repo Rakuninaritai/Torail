@@ -179,3 +179,12 @@ SIMPLE_JWT={
     # 一度使ったリフトーはブラックリスト行
     'BLACKLIST_AFTER_ROTATION':True
 }
+
+# settings.py
+STATIC_URL  = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# 追加パッケージ
+INSTALLED_APPS += ["whitenoise.runserver_nostatic"]
+MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
