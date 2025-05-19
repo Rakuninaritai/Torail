@@ -1,0 +1,22 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+
+RUN mkdir -p /app/staticfiles
+ENV STATIC_ROOT=/app/staticfiles
+RUN python manage.py collectstatic --noinput
+
+
+
+# Railway が自動で渡す PORT を尊重
+CMD ["sh", "-c", "python manage.py migrate && gunicorn Torail.wsgi:application --bind 0.0.0.0:${PORT:-8000}"]
+

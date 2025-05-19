@@ -1,0 +1,42 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: torail
+      POSTGRES_USER: torail
+      POSTGRES_PASSWORD: torail_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: .                # ← ルートをビルドコンテキストに
+      dockerfile: Dockerfile.backend  # ← ファイル名をそのまま指定
+    env_file: .env              # 必要なら.envを置く
+    volumes:
+      - .:/app                   # ホストのルートを/appにマウント
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "python manage.py migrate &&
+             gunicorn Torail.wsgi:application --bind 0.0.0.0:${PORT:-8000}"
+
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    depends_on:
+      - backend
+    # ホストのコードはマウントするが、node_modules はコンテナ側を優先
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+
+volumes:
+  postgres_data:

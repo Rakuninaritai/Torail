@@ -16,5 +16,5 @@ urllib3==2.3.0
 gunicorn==23.0.0
 dj-database-url == 2.3.0
 psycopg2-binary == 2.9.10
-# postgresql://postgres:cyJNLjKKEiwJDbeMfFrXOQNmecAUIUsQ@postgres.railway.internal:5432/railway
 python-dotenv == 1.1.0
+whitenoise==6.4.0
