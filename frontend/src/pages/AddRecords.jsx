@@ -43,6 +43,7 @@ const AddRecords= ({token,onRecordAdded,updateFlag}) => {
   return (
     <div id='record'>
       <h1><i className="bi bi-clock"></i> 測定</h1>
+      {API_BASE}
       {runningRecord && runningRecord.length > 0?(<TimerContorl token={token} records={runningRecord} key={runningRecord} settimerchange={Timer_State_Change}/>):(
         <div>
           <AddRecordForm token={token} onRecordAdded={onRecordAdded} selectSub={SetSelectSubject} selectSubName={SetSelectSubjectName} key={Change} sencha={SentakuChange} sub={SelectSubject} subname={SelectSubjectName} />
