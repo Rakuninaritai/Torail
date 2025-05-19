@@ -40,3 +40,6 @@ services:
 
 volumes:
   postgres_data:
+
+# docker compose up --build -d
+# docker compose down

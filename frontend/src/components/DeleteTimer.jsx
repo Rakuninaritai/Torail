@@ -1,13 +1,15 @@
 import React from 'react'
 //  タイマー削除用コンポーネント
 const DeleteTimer = ({token,record,settimerchange}) => {
+  // Vite のケース
+  const API_BASE = import.meta.env.VITE_API_BASE_URL
   // 削除ボタン押下時関数
   const handleDelete=()=>{
      // 確認ダイアログ
     const result=window.confirm("本当に削除してもよいですか。")
     if (result){
       // DELETE リクエストを使って、既存のレコードを削除する
-      fetch(`http://127.0.0.1:8000/api/records/${record.id}/`, {
+      fetch(`${API_BASE}/records/${record.id}/`, {
         method: "DELETE",
         headers: {
           "Authorization": `Token ${token}`

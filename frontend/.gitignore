@@ -29,3 +29,6 @@ dist-ssr
 __pycache__/
 db-volumes/
 db.sqlite3
+# 環境変数ファイル
+.env
+.env.*

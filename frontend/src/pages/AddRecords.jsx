@@ -6,6 +6,8 @@ import TimerContorl from '../components/TimerContorl'
 
 
 const AddRecords= ({token,onRecordAdded,updateFlag}) => {
+  // Vite のケース
+  const API_BASE = import.meta.env.VITE_API_BASE_URL
   // 追加されたら選択肢変更用state
   const [Change,setChange]=useState(false)
   const [SelectSubject,SetSelectSubject]=useState("")
@@ -22,13 +24,13 @@ const AddRecords= ({token,onRecordAdded,updateFlag}) => {
   const [runningRecord,setRunningRecord]=useState()
   // 計測中のレコードを取得(appのレコード作成管理用のstateのsetを引っ張って状態更新してるんでそのstateを持ってきて状態管理)
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/api/records/", {
+    fetch(`${API_BASE}/records/`, {
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`
       }
     })
-      .then(response => response.json())
+      .then(response =>response.json())
       .then(data => {
         // timerの状態が2以外の奴だけ取得(終了していない)(一つでも終了していなければタイマーが出るので重複計測はないはず)
         console.log(data)

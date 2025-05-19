@@ -5,13 +5,15 @@ import RecordDetail from './RecordDetail';
 import DeleteTimer from './DeleteTimer';
 
 const RecordsList = ({token}) => {
+  // Vite のケース
+  const API_BASE = import.meta.env.VITE_API_BASE_URL
   const [records,setRecords]=useState([]);
   // 詳細ボタンが押されたらこのstateを変えて切換え(押されたらtrue)
   const [detailPush,setDetailPush]=useState(null)
   // 初回のみ実行
   useEffect(() => {
     // APIを呼び出す
-    fetch("http://127.0.0.1:8000/api/records/",{
+    fetch(`${API_BASE}/records/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`

@@ -4,6 +4,8 @@ import DeleteTimer from './DeleteTimer'
 
 // タイマー終了後記録を保存するコンポーネント(確定させる?)
 const TimerRecord = ({token,record,settimerchange}) => {
+  // Vite のケース
+  const API_BASE = import.meta.env.VITE_API_BASE_URL
   // formdata(送るデータ)のusestate
   const [formData,setFormData]=useState({
     language:"",
@@ -14,7 +16,7 @@ const TimerRecord = ({token,record,settimerchange}) => {
   // データ取得(選択肢の)(第二が[]につきレンダリング時のみ実行)
   useEffect(()=>{
     // 言語
-    fetch("http://127.0.0.1:8000/api/languages/",{
+    fetch(`${API_BASE}/languages/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`
@@ -39,7 +41,7 @@ const TimerRecord = ({token,record,settimerchange}) => {
       timer_state:2,
     }
     // 更新
-    fetch(`http://127.0.0.1:8000/api/records/${record.id}/`, {
+    fetch(`${API_BASE}/records/${record.id}/`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",

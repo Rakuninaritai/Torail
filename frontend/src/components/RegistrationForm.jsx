@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 
 const  RegistrationForm = ({onRegistered})=> {
+  // Vite のケース
+  const API_BASE = import.meta.env.VITE_API_BASE_URL
   // 会員登録用のデータ
   const [formData,setFormData]=useState({
     username:"",
@@ -22,7 +24,7 @@ const  RegistrationForm = ({onRegistered})=> {
     // 通常の送信をなし
     e.preventDefault()
     // 会員登録用エンドポイントに送信
-    fetch("http://127.0.0.1:8000/api/auth/registration/",{
+    fetch(`${API_BASE}/auth/registration/`,{
       method:"POST",
       headers:{
         // djangoにjson形式データであることを伝える

@@ -3,6 +3,8 @@ import AddSubjectForm from './AddSubjectForm'
 import AddTaskForm from './AddTaskForm'
 
 function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,subname}) {
+  // Vite のケース
+  const API_BASE = import.meta.env.VITE_API_BASE_URL
   // formdata(送るデータ)のusestate
   const [formData,setFormData]=useState({
     subject:"",
@@ -22,7 +24,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
   // データ取得(第二が[]につきレンダリング時のみ実行)
   useEffect(()=>{
     // subjectsのデータを取得し
-    fetch("http://127.0.0.1:8000/api/subjects/",{
+    fetch(`${API_BASE}/subjects/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`
@@ -36,7 +38,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
     .catch((err)=>console.error(err))
 
     // task
-    fetch("http://127.0.0.1:8000/api/tasks/",{
+    fetch(`${API_BASE}/tasks/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`
@@ -47,7 +49,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
     .catch((err)=>console.error(err))
 
     // 言語
-    fetch("http://127.0.0.1:8000/api/languages/",{
+    fetch(`${API_BASE}/languages/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`
@@ -91,7 +93,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
       start_time:now
     }
     // postで送る
-    fetch("http://127.0.0.1:8000/api/records/",{
+    fetch(`${API_BASE}/records/`,{
       method:"POST",
       headers:{
         "Content-Type":"application/json",

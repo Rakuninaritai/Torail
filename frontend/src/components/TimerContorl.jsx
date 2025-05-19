@@ -6,6 +6,8 @@ import SectoMin from './SectoMin'
 // タイマーコンポーネント(計測やストップ)
 // ユーザーtokenやタイマーのレコードやタイマーの状態が変化したとき用のstateを持つ
 const TimerContorl = ({token,records,settimerchange}) => {
+  // Vite のケース
+  const API_BASE = import.meta.env.VITE_API_BASE_URL
   // タイマの動作のstate
   // 実行中のレコードを取り出し
   const record=records[0]
@@ -68,7 +70,7 @@ const TimerContorl = ({token,records,settimerchange}) => {
     console.log("今のタイム↓")
     console.log(time)
      // PATCH リクエストを使って、既存のレコードを更新する
-     fetch(`http://127.0.0.1:8000/api/records/${record.id}/`, {
+     fetch(`${API_BASE}/records/${record.id}/`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -101,7 +103,7 @@ const TimerContorl = ({token,records,settimerchange}) => {
       timer_state:0,
     }
      // PATCH リクエストを使って、既存のレコードを更新する
-     fetch(`http://127.0.0.1:8000/api/records/${record.id}/`, {
+     fetch(`${API_BASE}/records/${record.id}/`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -148,7 +150,7 @@ const handleFnish=()=>{
       timer_state:3,
     }
     // PATCH リクエストを使って、既存のレコードを更新する
-    fetch(`http://127.0.0.1:8000/api/records/${record.id}/`, {
+    fetch(`${API_BASE}/records/${record.id}/`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",

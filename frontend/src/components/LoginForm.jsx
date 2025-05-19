@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 
 const LoginForm = ({onLoginSuccess,settoken}) => {
+  // Vite のケース
+  const API_BASE = import.meta.env.VITE_API_BASE_URL
   // 送るやつのstate
   const [credentials,setCredentials]=useState({username:"",password:""})
   // エラー表示などのmessagestate
@@ -15,7 +17,7 @@ const LoginForm = ({onLoginSuccess,settoken}) => {
   // 送信ボタン押されたら動作
   const handleSubmit=(e)=>{
     e.preventDefault()
-    fetch("http://127.0.0.1:8000/api/auth/login/",{
+    fetch(`${API_BASE}/auth/login/`,{
       method:"POST",
       headers:{
         "Content-Type":"application/json",

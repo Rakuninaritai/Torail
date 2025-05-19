@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import DeleteTimer from './DeleteTimer'
 
 const RecordDetail = ({cf,rec,token}) => {
+  // Vite のケース
+  const API_BASE = import.meta.env.VITE_API_BASE_URL
   const [isEditing,setIsediting]=useState(false)
   const onEdit=()=>{
     setIsediting(!isEditing)
@@ -30,7 +32,7 @@ const RecordDetail = ({cf,rec,token}) => {
   // データ取得(第二が[]につきレンダリング時のみ実行)
   useEffect(()=>{
     // subjectsのデータを取得し
-    fetch("http://127.0.0.1:8000/api/subjects/",{
+    fetch(`${API_BASE}/subjects/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`
@@ -44,7 +46,7 @@ const RecordDetail = ({cf,rec,token}) => {
     .catch((err)=>console.error(err))
 
     // task
-    fetch("http://127.0.0.1:8000/api/tasks/",{
+    fetch(`${API_BASE}/tasks/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`
@@ -55,7 +57,7 @@ const RecordDetail = ({cf,rec,token}) => {
     .catch((err)=>console.error(err))
 
     // 言語
-    fetch("http://127.0.0.1:8000/api/languages/",{
+    fetch(`${API_BASE}/languages/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`
@@ -88,7 +90,7 @@ const RecordDetail = ({cf,rec,token}) => {
       ...formData,
     }
     // postで送る
-    fetch(`http://127.0.0.1:8000/api/records/${rec.id}/`,{
+    fetch(`${API_BASE}/records/${rec.id}/`,{
       method:"PATCH",
       headers:{
         "Content-Type":"application/json",

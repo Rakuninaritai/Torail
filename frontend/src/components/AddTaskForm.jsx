@@ -1,6 +1,8 @@
 import React, {  useState } from 'react'
 
 const AddTaskForm = ({token,changes,sub,subname}) => {
+  // Vite のケース
+  const API_BASE = import.meta.env.VITE_API_BASE_URL
   const [formData,setFormData]=useState({
       subject:sub,
       name:"",
@@ -29,7 +31,7 @@ const AddTaskForm = ({token,changes,sub,subname}) => {
     // ページがreloadして送信をデフォルトではしようとするがそれをキャンセルしている
     e.preventDefault();
     // postで送る
-    fetch("http://127.0.0.1:8000/api/tasks/",{
+    fetch(`${API_BASE}/tasks/`,{
       method:"POST",
       headers:{
         "Content-Type":"application/json",
