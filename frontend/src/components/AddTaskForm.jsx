@@ -31,7 +31,7 @@ const AddTaskForm = ({token,changes,sub,subname}) => {
     // ページがreloadして送信をデフォルトではしようとするがそれをキャンセルしている
     e.preventDefault();
     // postで送る
-    fetch(`${API_BASE}/tasks/`,{
+    fetch(`${API_BASE}tasks/`,{
       method:"POST",
       headers:{
         "Content-Type":"application/json",

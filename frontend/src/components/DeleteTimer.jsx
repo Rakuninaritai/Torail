@@ -9,7 +9,7 @@ const DeleteTimer = ({token,record,settimerchange}) => {
     const result=window.confirm("本当に削除してもよいですか。")
     if (result){
       // DELETE リクエストを使って、既存のレコードを削除する
-      fetch(`${API_BASE}/records/${record.id}/`, {
+      fetch(`${API_BASE}records/${record.id}/`, {
         method: "DELETE",
         headers: {
           "Authorization": `Token ${token}`

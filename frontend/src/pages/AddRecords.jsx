@@ -24,7 +24,7 @@ const AddRecords= ({token,onRecordAdded,updateFlag}) => {
   const [runningRecord,setRunningRecord]=useState()
   // 計測中のレコードを取得(appのレコード作成管理用のstateのsetを引っ張って状態更新してるんでそのstateを持ってきて状態管理)
   useEffect(() => {
-    fetch(`${API_BASE}/records/`, {
+    fetch(`${API_BASE}records/`, {
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`

@@ -24,7 +24,7 @@ const  RegistrationForm = ({onRegistered})=> {
     // 通常の送信をなし
     e.preventDefault()
     // 会員登録用エンドポイントに送信
-    fetch(`${API_BASE}/auth/registration/`,{
+    fetch(`${API_BASE}auth/registration/`,{
       method:"POST",
       headers:{
         // djangoにjson形式データであることを伝える

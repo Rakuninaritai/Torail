@@ -70,7 +70,7 @@ const TimerContorl = ({token,records,settimerchange}) => {
     console.log("今のタイム↓")
     console.log(time)
      // PATCH リクエストを使って、既存のレコードを更新する
-     fetch(`${API_BASE}/records/${record.id}/`, {
+     fetch(`${API_BASE}records/${record.id}/`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -103,7 +103,7 @@ const TimerContorl = ({token,records,settimerchange}) => {
       timer_state:0,
     }
      // PATCH リクエストを使って、既存のレコードを更新する
-     fetch(`${API_BASE}/records/${record.id}/`, {
+     fetch(`${API_BASE}records/${record.id}/`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -150,7 +150,7 @@ const handleFnish=()=>{
       timer_state:3,
     }
     // PATCH リクエストを使って、既存のレコードを更新する
-    fetch(`${API_BASE}/records/${record.id}/`, {
+    fetch(`${API_BASE}records/${record.id}/`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",

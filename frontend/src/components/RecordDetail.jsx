@@ -32,7 +32,7 @@ const RecordDetail = ({cf,rec,token}) => {
   // データ取得(第二が[]につきレンダリング時のみ実行)
   useEffect(()=>{
     // subjectsのデータを取得し
-    fetch(`${API_BASE}/subjects/`,{
+    fetch(`${API_BASE}subjects/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`
@@ -46,7 +46,7 @@ const RecordDetail = ({cf,rec,token}) => {
     .catch((err)=>console.error(err))
 
     // task
-    fetch(`${API_BASE}/tasks/`,{
+    fetch(`${API_BASE}tasks/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`
@@ -57,7 +57,7 @@ const RecordDetail = ({cf,rec,token}) => {
     .catch((err)=>console.error(err))
 
     // 言語
-    fetch(`${API_BASE}/languages/`,{
+    fetch(`${API_BASE}languages/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`
@@ -90,7 +90,7 @@ const RecordDetail = ({cf,rec,token}) => {
       ...formData,
     }
     // postで送る
-    fetch(`${API_BASE}/records/${rec.id}/`,{
+    fetch(`${API_BASE}records/${rec.id}/`,{
       method:"PATCH",
       headers:{
         "Content-Type":"application/json",

@@ -16,7 +16,7 @@ const TimerRecord = ({token,record,settimerchange}) => {
   // データ取得(選択肢の)(第二が[]につきレンダリング時のみ実行)
   useEffect(()=>{
     // 言語
-    fetch(`${API_BASE}/languages/`,{
+    fetch(`${API_BASE}languages/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`
@@ -41,7 +41,7 @@ const TimerRecord = ({token,record,settimerchange}) => {
       timer_state:2,
     }
     // 更新
-    fetch(`${API_BASE}/records/${record.id}/`, {
+    fetch(`${API_BASE}records/${record.id}/`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",

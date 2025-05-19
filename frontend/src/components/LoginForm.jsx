@@ -17,7 +17,7 @@ const LoginForm = ({onLoginSuccess,settoken}) => {
   // 送信ボタン押されたら動作
   const handleSubmit=(e)=>{
     e.preventDefault()
-    fetch(`${API_BASE}/auth/login/`,{
+    fetch(`${API_BASE}auth/login/`,{
       method:"POST",
       headers:{
         "Content-Type":"application/json",

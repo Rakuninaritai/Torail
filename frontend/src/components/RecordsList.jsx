@@ -13,7 +13,7 @@ const RecordsList = ({token}) => {
   // 初回のみ実行
   useEffect(() => {
     // APIを呼び出す
-    fetch(`${API_BASE}/records/`,{
+    fetch(`${API_BASE}records/`,{
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Token ${token}`

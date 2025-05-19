@@ -14,7 +14,7 @@ const AddSubjectForm = ({token,changes}) => {
     // ページがreloadして送信をデフォルトではしようとするがそれをキャンセルしている
     e.preventDefault();
     // postで送る
-    fetch(`${API_BASE}/subjects/`,{
+    fetch(`${API_BASE}subjects/`,{
       method:"POST",
       headers:{
         "Content-Type":"application/json",
