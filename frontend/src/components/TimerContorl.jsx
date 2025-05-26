@@ -2,10 +2,13 @@ import React, { useEffect, useRef, useState } from 'react'
 import TimerRecord from './TimerRecord'
 import DeleteTimer from './DeleteTimer'
 import SectoMin from './SectoMin'
+import { api } from "../api";
 
 // タイマーコンポーネント(計測やストップ)
 // ユーザーtokenやタイマーのレコードやタイマーの状態が変化したとき用のstateを持つ
 const TimerContorl = ({token,records,settimerchange}) => {
+  // エラー表示などのmessagestate
+  const [errors,setErrors]=useState("")
   // Vite のケース
   const API_BASE = import.meta.env.VITE_API_BASE_URL
   // タイマの動作のstate
@@ -56,7 +59,7 @@ const TimerContorl = ({token,records,settimerchange}) => {
   },[record])
   
   // 中断ボタン押下時関数
-  const handleSusupend=()=>{
+  const handleSusupend=async()=>{
     console.log("押してすぐのtime")
     console.log(time)
     const updateData={
@@ -70,32 +73,24 @@ const TimerContorl = ({token,records,settimerchange}) => {
     console.log("今のタイム↓")
     console.log(time)
      // PATCH リクエストを使って、既存のレコードを更新する
-     fetch(`${API_BASE}records/${record.id}/`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Token ${token}`
-      },
-      body: JSON.stringify(updateData)
-    })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error("レコード更新に失敗しました");
-        }
-        return response.json();
-      })
-      .then(data => {
-        console.log("更新完了:", data);
-        clearInterval(timerIdRef.current);
+     try{
+         const data=await api(`/records/${record.id}/`,{
+         method: 'PATCH',
+         body:JSON.stringify(updateData),
+         })
+         console.log("レコード更新しました",data)
+         clearInterval(timerIdRef.current);
         settimerchange()
-      })
-      .catch(error => console.error("更新エラー:", error));
+      }catch(err){
+           console.error(err);
+           setErrors(err)
+      }
   }
 
 
   
   // 再開ボタン押下時関数
-  const handleContinue=()=>{
+  const handleContinue=async()=>{
     const updateData={
       // stop時間として今の時刻を
       stop_time:new Date().toISOString(),
@@ -103,25 +98,18 @@ const TimerContorl = ({token,records,settimerchange}) => {
       timer_state:0,
     }
      // PATCH リクエストを使って、既存のレコードを更新する
-     fetch(`${API_BASE}records/${record.id}/`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Token ${token}`
-      },
-      body: JSON.stringify(updateData)
-    })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error("レコード更新に失敗しました");
-        }
-        return response.json();
-      })
-      .then(data => {
-        console.log("更新完了:", data);
+     try{
+         const data=await api(`/records/${record.id}/`,{
+         method: 'PATCH',
+         body:JSON.stringify(updateData),
+         })
+         console.log("レコード更新しました",data)
+         clearInterval(timerIdRef.current);
         settimerchange()
-      })
-      .catch(error => console.error("更新エラー:", error));
+      }catch(err){
+           console.error(err);
+           setErrors(err)
+      }
   }
   // btnIF
   // const handleClick=()=>{
@@ -133,7 +121,7 @@ const TimerContorl = ({token,records,settimerchange}) => {
   //   }
   // }
 // 終了ボタン押下時関数
-const handleFnish=()=>{
+const handleFnish=async()=>{
   // 確認ダイアログ
   const result=window.confirm("本当に終了してもよいですか。")
   // ダイアログがtrueなら
@@ -150,26 +138,18 @@ const handleFnish=()=>{
       timer_state:3,
     }
     // PATCH リクエストを使って、既存のレコードを更新する
-    fetch(`${API_BASE}records/${record.id}/`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Token ${token}`
-      },
-      body: JSON.stringify(updateData)
-    })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error("レコード更新に失敗しました");
-        }
-        return response.json();
-      })
-      .then(data => {
-        console.log("更新完了:", data);
-        clearInterval(timerIdRef.current);
+    try{
+         const data=await api(`/records/${record.id}/`,{
+         method: 'PATCH',
+         body:JSON.stringify(updateData),
+         })
+         console.log("レコード更新しました",data)
+         clearInterval(timerIdRef.current);
         settimerchange()
-      })
-      .catch(error => console.error("更新エラー:", error));
+      }catch(err){
+           console.error(err);
+           setErrors(err)
+      }
   }
 }
 
@@ -177,7 +157,19 @@ const handleFnish=()=>{
     <div className="timer-card mx-auto">
       {record.timer_state===3?(<TimerRecord token={token} record={record} settimerchange={settimerchange}  />):(
         <div>
-          {time}
+          {/* 送信エラー */}
+          {errors.detail && (
+            <div className="text-danger mt-1">
+              <div>{errors.detail}</div>
+            </div>
+          )}
+          {/* ── フォーム全体エラー(non_field_errors) ── */}
+          {errors.non_field_errors && (
+            <div className="alert alert-danger">
+              {errors.non_field_errors.map((msg, i) => (
+                <div key={i}>{msg}</div>
+              ))}
+            </div>)}
           <h5>教科 : <span className=''>{record.subject.name}</span></h5>
           <h5>課題 : {record.task.name}</h5>
           <h5>ユーザー : {record.user.username}</h5>

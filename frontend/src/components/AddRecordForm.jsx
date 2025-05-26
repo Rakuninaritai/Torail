@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import AddSubjectForm from './AddSubjectForm'
 import AddTaskForm from './AddTaskForm'
+import { api } from '../api'
 
 function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,subname}) {
   // Vite のケース
@@ -14,6 +15,8 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
     // description:"",
     // duration:"",
   })
+  // エラー表示用のstate
+  const [errors,setErrors]=useState("")
   // 選択肢のある奴のusestate
   const [subjects,setSubjects]=useState([])
   const [tasks,setTasks]=useState([])
@@ -22,42 +25,29 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
   const [filteredTasks,setFilteredTasks]=useState([])
 
   // データ取得(第二が[]につきレンダリング時のみ実行)
-  useEffect(()=>{
-    // subjectsのデータを取得し
-    fetch(`${API_BASE}subjects/`,{
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Token ${token}`
-      }
-    })
-    // 取得出来たらresとして受け取りjson化
-    .then((res)=>res.json())
-    // json化したのをdataとしてsetsubjectsに入れる
-    .then((data)=>setSubjects(data))
-    // エラーが起きたらcatchにくる
-    .catch((err)=>console.error(err))
+  useEffect(  ()=>{
+    const shutoku = async ()=>{
+      try{
+        const ss=await api('/subjects/',{
+          method: 'GET',
+        })
+        setSubjects(ss)
+        const st=await api('/tasks/',{
+          method: 'GET',
+        })
+        setTasks(st)
 
-    // task
-    fetch(`${API_BASE}tasks/`,{
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Token ${token}`
+        // const sl=await api('/languages/',{
+        //   method: 'GET',
+        // })
+        // setlanguages(sl)
+      }catch (err) {
+        console.error(err);
+        setErrors(err)
       }
-    })
-    .then((res)=>res.json())
-    .then((data)=>setTasks(data))
-    .catch((err)=>console.error(err))
-
-    // 言語
-    fetch(`${API_BASE}languages/`,{
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Token ${token}`
-      }
-    })
-    .then((res)=>res.json())
-    // .then((data)=>setLanguages(data))
-    .catch((err)=>console.error(err))
+        
+    }
+    shutoku()
   },[])
 
   // 値が変わったら更新する
@@ -82,7 +72,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
   },[formData.subject,tasks])
 
   // 送信ボタン押されたら
-  const handleSubmit=(e)=>{
+  const handleSubmit=async (e)=>{
     // ページがreloadして送信をデフォルトではしようとするがそれをキャンセルしている
     e.preventDefault();
     // 現時刻を取得してnow格納
@@ -93,25 +83,42 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
       start_time:now
     }
     // postで送る
-    fetch(`${API_BASE}records/`,{
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        "Authorization": `Token ${token}`
-      },
-      body:JSON.stringify(recordData),
-    })
-    .then((response)=>response.text())
-    .then((data)=>{
-      console.log("学習記録が追加されました",data)
-      onRecordAdded();//呼び出してる、Appの更新状態用stateを反転させる関数を(appで反転するとリスと再読み込みさせてる)
-    })
-    .catch((error)=>console.log("Error adding record:",error))
+    try{
+        const data=await api('/records/',{
+          method: 'POST',
+          body:JSON.stringify(recordData),
+        })
+        console.log("学習記録が追加されました",data)
+        onRecordAdded();//呼び出してる、Appの更新状態用stateを反転させる関数を(appで反転するとリスと再読み込みさせてる)
+    }catch(err){
+      console.error(err);
+      setErrors(err)
+    }
   }
   return (
     <div className="timer-card mx-auto">
       <form onSubmit={handleSubmit}>
+        {/* 送信エラー */}
+        {errors.detail && (
+          <div className="text-danger mt-1">
+            <div>{errors.detail}</div>
+          </div>
+        )}
+        {/* ── フォーム全体エラー(non_field_errors) ── */}
+        {errors.non_field_errors && (
+          <div className="alert alert-danger">
+            {errors.non_field_errors.map((msg, i) => (
+              <div key={i}>{msg}</div>
+            ))}
+          </div>)}
         <label htmlFor="subject" className="form-label">教科</label>
+        {errors.subject && (
+            <div className="text-danger mt-1">
+              {errors.subject.map((msg, i) => (
+                <div key={i}>{msg}</div>
+              ))}
+            </div>
+          )}
         <select className='form-control mb-3' name='subject' value={formData.subject} onChange={handleChange} required>
           <option value="">選択してください</option>
           {/* usestateのsubjectsをmap関数で1つをsubとして回す */}
@@ -130,6 +137,13 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
         </button>
         <hr />
         <label htmlFor="task" className="form-label">課題</label>
+        {errors.task && (
+            <div className="text-danger mt-1">
+              {errors.task.map((msg, i) => (
+                <div key={i}>{msg}</div>
+              ))}
+            </div>
+          )}
         <select  className='form-control mb-3' name='task' value={formData.task} onChange={handleChange} required>
           <option value="">選択してください</option>
           {filteredTasks.map((task)=>(

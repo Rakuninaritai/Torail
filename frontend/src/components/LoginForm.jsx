@@ -6,7 +6,7 @@ const LoginForm = ({onLoginSuccess,settoken}) => {
   // 送るやつのstate
   const [credentials,setCredentials]=useState({username:"",password:""})
   // エラー表示などのmessagestate
-  const [message,setMessage]=useState("")
+  const [errors,setErrors]=useState("")
 
   // input変わるとデータ取得
   const handleChange=(e)=>{
@@ -15,56 +15,93 @@ const LoginForm = ({onLoginSuccess,settoken}) => {
   }
 
   // 送信ボタン押されたら動作
-  const handleSubmit=(e)=>{
-    e.preventDefault()
-    fetch(`${API_BASE}auth/login/`,{
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-      },
-      // 文字列をjson文字列にしてる
-      body:JSON.stringify(credentials),
-    })
-    .then((response)=>{
-      if(!response.ok){
-        return response.json().then((data)=>{
-          throw new Error(JSON.stringify(data))
+    const handleSubmit = async (e)=>{
+      e.preventDefault()
+      try {
+        // ① fetch 実行
+        const res = await fetch(`${API_BASE}token/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',                     // Cookie 認証するなら必須
+          body: JSON.stringify(credentials),
         })
-      }
-      return response.json()
-    })
-    .then((data)=>{
-      console.log("Login succcessful:",data)
-      localStorage.setItem("access_token",data.key)
-      onLoginSuccess&&onLoginSuccess()
-      settoken(data.key)
-    })
-    .catch((error)=>{
-      console.error("Login error:",error)
-      setMessage("ログインに失敗しました:",+error.message)
-    })
-  }
+
+        // ② JSON にパース
+        const data = await res.json()
+
+        // ③ 400 系ならエラー state にセットして抜ける
+        if (!res.ok) {
+          setErrors(data)
+          console.log(data)
+          return
+        }
+
+        // ④ 成功時の処理
+        console.log('Registration successful:', data)
+        
+        onLoginSuccess&&onLoginSuccess()
+    } catch (err) {
+      // ネットワークエラー等
+      console.error('Network or unexpected error:', err)
+      setErrors({non_field_errors: ["通信エラーが発生しました。再度お試しください。"]})
+    }
+    }
 
 
 
 
   
   return (
-    <form onSubmit={handleSubmit}>
-      <h2>ログイン</h2>
-      <label >
-        ユーザー名:
-        <input type="text" name='username' value={credentials.username} onChange={handleChange} required />
-      </label>
-      <br />
-      <label >
-        パスワード:
-        <input type="password" name='password' value={credentials.password} onChange={handleChange} required />
-      </label>
-      <br />
-      <button type='submit'>ログイン</button>
-      {message&&<p>{message}</p>}
-    </form>
+    <div className='timer-card mx-auto'>
+      <form onSubmit={handleSubmit}>
+        <h2>ログイン</h2>
+        {/* 送信エラー */}
+          {errors.detail && (
+            <div className="text-danger mt-1">
+              <div>{errors.detail}</div>
+            </div>
+          )}
+        {/* ── フォーム全体エラー(non_field_errors) ── */}
+        {errors.non_field_errors && (
+          <div className="alert alert-danger">
+            {errors.non_field_errors.map((msg, i) => (
+              <div key={i}>{msg}</div>
+            ))}
+          </div>)}
+        <label  htmlFor="username" className="form-label">ユーザー名</label>
+          {errors.username && (
+            <div className="text-danger mt-1">
+              {errors.username.map((msg, i) => (
+                <div key={i}>{msg}</div>
+              ))}
+          </div>)}
+          <input type="text" className='form-control mb-3' name='username' value={credentials.username} onChange={handleChange} required />
+        
+        <br />
+        <label   htmlFor="password" className="form-label">パスワード</label>
+        <small  className="form-text text-muted  d-block">8文字以上で、大文字と数字を含めてください</small>
+        {errors.password && (
+            <div className="text-danger mt-1">
+              {errors.password.map((msg, i) => (
+                <div key={i}>{msg}</div>
+              ))}
+            </div>
+          )}
+        <input type="password" className='form-control mb-3' name='password' value={credentials.password} onChange={handleChange} required 
+        minLength={8} //最低8文字
+        pattern="(?=.*[A-Z])(?=.*\d).+"  //大文字小文字数字含めて
+        title="パスワードは8文字以上で、大文字と数字を含めてください"  //フォールドにホバー時表示
+        onInvalid={e => e.target.setCustomValidity("8文字以上で、大文字と数字を含む必要があります")}  //エラー時表示文字
+        onInput={e => e.target.setCustomValidity("")}  //クリア文字
+        />
+        
+        <br />
+        <div className="d-flex justify-content-center gap-3 mt-3">
+          <button id="startBtn"  type='submit' className="btn btn-info btn-lg"><i className="bi bi-door-open"></i></button>
+        </div>
+        {/* {message&&<p>{message}</p>} */}
+      </form>
+    </div>
   )
 }
 

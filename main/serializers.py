@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from .models import User, Subject, Task, Record, Language
+from rest_framework.validators import UniqueValidator
+from dj_rest_auth.registration.serializers import RegisterSerializer
 # シリアライザーはpythonをJSONにJSONをPYTHONに変換する役割がある
 # つまりフロントでも使えるようにする
 # Userモデルのシリアライザ
@@ -55,3 +57,22 @@ class RecordWriteSerializer(serializers.ModelSerializer):
   class Meta:
     model=Record
     fields=[ 'subject', 'task', 'language', 'date', 'description', 'duration', 'start_time', 'end_time','stop_time','timer_state']
+    
+    
+# メルアド重複を500エラーではなく400エラーで出すためのシリアライザ
+# サーバーに送って500エラーになる前にシリアライザの段階で400にしてる
+class CustomRegisterSerializer(RegisterSerializer):
+    email = serializers.EmailField(
+        required=True,
+        validators=[
+            UniqueValidator(
+                queryset=User.objects.all(),
+                message="このメールアドレスは既に使われています。"
+            )
+        ]
+    )
+
+    def get_cleaned_data(self):
+        data = super().get_cleaned_data()
+        data['email'] = self.validated_data.get('email', '')
+        return data

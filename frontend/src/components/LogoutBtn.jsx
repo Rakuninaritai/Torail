@@ -2,7 +2,6 @@ import React from 'react'
 
 const LogoutBtn = ({onLogoutSuccess}) => {
   const handleLogout=()=>{
-    localStorage.removeItem("access_token")
     onLogoutSuccess&&onLogoutSuccess()
   }
   return (

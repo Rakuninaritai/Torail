@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import DeleteTimer from './DeleteTimer'
+import { api } from "../api";
 
 const RecordDetail = ({cf,rec,token}) => {
+  // エラー表示などのmessagestate
+  const [errors,setErrors]=useState("")
   // Vite のケース
   const API_BASE = import.meta.env.VITE_API_BASE_URL
   const [isEditing,setIsediting]=useState(false)
@@ -31,41 +34,29 @@ const RecordDetail = ({cf,rec,token}) => {
   const [filteredTasks,setFilteredTasks]=useState([])
   // データ取得(第二が[]につきレンダリング時のみ実行)
   useEffect(()=>{
-    // subjectsのデータを取得し
-    fetch(`${API_BASE}subjects/`,{
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Token ${token}`
-      }
-    })
-    // 取得出来たらresとして受け取りjson化
-    .then((res)=>res.json())
-    // json化したのをdataとしてsetsubjectsに入れる
-    .then((data)=>setSubjects(data))
-    // エラーが起きたらcatchにくる
-    .catch((err)=>console.error(err))
-
-    // task
-    fetch(`${API_BASE}tasks/`,{
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Token ${token}`
-      }
-    })
-    .then((res)=>res.json())
-    .then((data)=>setTasks(data))
-    .catch((err)=>console.error(err))
-
-    // 言語
-    fetch(`${API_BASE}languages/`,{
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Token ${token}`
-      }
-    })
-    .then((res)=>res.json())
-    .then((data)=>setLanguages(data))
-    .catch((err)=>console.error(err))
+    const shutoku = async ()=>{
+          try{
+            const ss=await api('/subjects/',{
+              method: 'GET',
+            })
+            setSubjects(ss)
+            const st=await api('/tasks/',{
+              method: 'GET',
+            })
+            setTasks(st)
+    
+            const sl=await api('/languages/',{
+              method: 'GET',
+            })
+            setLanguages(sl)
+          }catch (err) {
+            console.error(err);
+            setErrors(err)
+          }
+            
+        }
+        shutoku()
+    
   },[])
   // formdataのsubjectが変わったら課題を更新する
   useEffect(()=>{
@@ -81,7 +72,7 @@ const RecordDetail = ({cf,rec,token}) => {
     
 
   // 送信ボタン押されたら
-  const handleSubmit=(e)=>{
+  const handleSubmit=async (e)=>{
     // ページがreloadして送信をデフォルトではしようとするがそれをキャンセルしている
     e.preventDefault();
     
@@ -90,20 +81,17 @@ const RecordDetail = ({cf,rec,token}) => {
       ...formData,
     }
     // postで送る
-    fetch(`${API_BASE}records/${rec.id}/`,{
-      method:"PATCH",
-      headers:{
-        "Content-Type":"application/json",
-        "Authorization": `Token ${token}`
-      },
-      body:JSON.stringify(recordData),
-    })
-    .then((response)=>response.text())
-    .then((data)=>{
-      console.log("学習記録が追加されました",data)
-      cf(null)
-    })
-    .catch((error)=>console.log("Error adding record:",error))
+    try{
+        const data=await api(`/records/${rec.id}/`,{
+        method: 'PATCH',
+        body:JSON.stringify(recordData),
+        })
+        console.log("学習記録が追加されました",data)
+        cf(null)
+        }catch(err){
+          console.error(err);
+          setErrors(err)
+        }
   }
   return (
     <div className="detail-wrapper">
@@ -111,11 +99,30 @@ const RecordDetail = ({cf,rec,token}) => {
       <h2 className="mb-3">
         <i className="bi bi-journal-text" /> 学習記録 詳細
       </h2>
+      {/* 送信エラー */}
+      {errors.detail && (
+        <div className="text-danger mt-1">
+          <div>{errors.detail}</div>
+        </div>
+      )}
+      {/* ── フォーム全体エラー(non_field_errors) ── */}
+      {errors.non_field_errors && (
+        <div className="alert alert-danger">
+          {errors.non_field_errors.map((msg, i) => (
+            <div key={i}>{msg}</div>
+          ))}
+        </div>)}
       <form id="recordForm" onSubmit={e => e.preventDefault()} >
         {/* 科目・課題・言語 */}
         <div className="row g-3 mb-3">
           <div className="col-md">
             <label className="form-label" htmlFor="subject">科目</label>
+            {errors.subject && (
+              <div className="text-danger mt-1">
+                {errors.subject.map((msg, i) => (
+                  <div key={i}>{msg}</div>
+                ))}
+            </div>)}
             <select className='form-control ' name='subject' value={formData.subject} onChange={handleChange} disabled={!isEditing}>
               <option value="">選択してください</option>
               {/* usestateのsubjectsをmap関数で1つをsubとして回す */}
@@ -126,6 +133,12 @@ const RecordDetail = ({cf,rec,token}) => {
           </div>
           <div className="col-md">
             <label className="form-label" htmlFor="task">課題</label>
+            {errors.task && (
+              <div className="text-danger mt-1">
+                {errors.task.map((msg, i) => (
+                  <div key={i}>{msg}</div>
+                ))}
+            </div>)}
             <select  className='form-control ' name='task' value={formData.task} onChange={handleChange} disabled={!isEditing}>
               <option value="">選択してください</option>
               {filteredTasks.map((task)=>(
@@ -135,6 +148,12 @@ const RecordDetail = ({cf,rec,token}) => {
           </div>
           <div className="col-md">
             <label className="form-label" htmlFor="language">言語</label>
+            {errors.language && (
+              <div className="text-danger mt-1">
+                {errors.language.map((msg, i) => (
+                  <div key={i}>{msg}</div>
+                ))}
+            </div>)}
             <select  className='form-control ' name='language' value={formData.language} onChange={handleChange} disabled={!isEditing}>
               <option value="">選択してください</option>
               {languages.map((task)=>(
@@ -148,6 +167,12 @@ const RecordDetail = ({cf,rec,token}) => {
         <div className="row g-3 mb-3">
           <div className="col-md-4">
             <label className="form-label" htmlFor="hours">学習時間 (ミリ秒)</label>
+            {errors.duration && (
+              <div className="text-danger mt-1">
+                {errors.duration.map((msg, i) => (
+                  <div key={i}>{msg}</div>
+                ))}
+            </div>)}
             <input
               id="hours"
               name="duration"
@@ -161,6 +186,12 @@ const RecordDetail = ({cf,rec,token}) => {
           </div>
           <div className="col-md-4">
             <label className="form-label" htmlFor="date">日付</label>
+            {errors.date && (
+              <div className="text-danger mt-1">
+                {errors.date.map((msg, i) => (
+                  <div key={i}>{msg}</div>
+                ))}
+            </div>)}
             <input
               id="date"
               name="date"
@@ -176,6 +207,12 @@ const RecordDetail = ({cf,rec,token}) => {
         {/* メモ */}
         <div className="mb-3">
           <label className="form-label" htmlFor="memo">メモ</label>
+          {errors.description && (
+              <div className="text-danger mt-1">
+                {errors.description.map((msg, i) => (
+                  <div key={i}>{msg}</div>
+                ))}
+            </div>)}
           <textarea
             id="memo"
             name="description"

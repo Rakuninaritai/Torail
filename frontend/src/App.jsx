@@ -9,30 +9,34 @@ import { Link, Route, Routes } from 'react-router-dom';
 import Home from './pages/Home';
 import AddRecords from './pages/AddRecords';
 import Records from './pages/Records';
+import Login_Register from "./pages/Login_Register";
+import { api } from "./api";
 function App() {
   
   // この値が変わったらレコードが更新されたことにする
   const [updateFlag,setUpdateFlag]=useState(false)
   const [Token,setToken]=useState(false)
+  // エラー表示などのmessagestate
+  const [errors,setErrors]=useState("")
+
   // 値を変わらせるやつ(レコードのフォームに渡してる、あっちでこれを呼び出す)
   const refreshRecords=()=>{
     setUpdateFlag(!updateFlag)
-  }
-  const handleLoginSuccess=()=>{
-    
-    // ローカルストレージに保存されているので取得
-    const token = localStorage.getItem("access_token")
-    setToken(token)
   }
   const handleLogoutSuccess=()=>{
     setToken("")
   }
   useEffect(()=>{
-    // ログインしていたらローカルストレージに保存されているので取得
-    const token = localStorage.getItem("access_token");
-    // tokenに合わせstateを更新(!!は回りくどいがtokenだとtokenが入っちゃうから)
-    setToken(token)
-  },[])
+     api('auth/user/')
+      .then(data => {setToken(data)
+        console.log(data)
+      })
+  
+      .catch((err) => {
+        setToken(null)
+        setErrors(err)
+      })
+  },[updateFlag])
   return (
     <div className="d-flex vh-100 w-100" style={{ minWidth: 0 }}>
       {/* <!-- Sidebar for desktop --> */}
@@ -131,6 +135,12 @@ function App() {
       </div>
 
       <main className="flex-grow-1 p-3" style={{ backgroundColor: '#f6f8fa' }}>
+        {/* 送信エラー */}
+        {errors.detail && (
+          <div className="text-danger mt-1">
+            <div>{errors.detail}</div>
+          </div>
+        )}
         {/* モバイル時のオフキャンバス・トグルボタンはそのまま */}
         <button
           className="btn btn-outline-secondary d-md-none mb-3"
@@ -155,7 +165,7 @@ function App() {
             element={
               Token
                 ? <AddRecords token={Token} onRecordAdded={refreshRecords} updateFlag={updateFlag} />
-                : <LoginForm onLoginSuccess={handleLoginSuccess} settoken={setToken} />
+                : <Login_Register onLoginSuccess={refreshRecords} settoken={setToken} />
             }
           />
 
@@ -165,14 +175,14 @@ function App() {
             element={
               Token
                 ? <Records token={Token} koushin={refreshRecords} />
-                : <LoginForm onLoginSuccess={handleLoginSuccess} settoken={setToken} />
+                : <Login_Register onLoginSuccess={refreshRecords} settoken={setToken} />
             }
           />
 
           {/* ログイン専用ページを用意しておきたい場合 */}
           <Route
-            path="/login"
-            element={<LoginForm onLoginSuccess={handleLoginSuccess} settoken={setToken} />}
+            path="/login_register"
+            element={<Login_Register onLoginSuccess={refreshRecords} settoken={setToken} />}
           />
         </Routes>
       </main>

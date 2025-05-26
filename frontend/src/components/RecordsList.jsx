@@ -3,8 +3,11 @@ import RecordsGraph from './RecordsGraph';
 import RecordDetailBtn from './RecordDetailBtn';
 import RecordDetail from './RecordDetail';
 import DeleteTimer from './DeleteTimer';
+import { api } from "../api";
 
 const RecordsList = ({token}) => {
+  // エラー表示などのmessagestate
+  const [errors,setErrors]=useState("")
   // Vite のケース
   const API_BASE = import.meta.env.VITE_API_BASE_URL
   const [records,setRecords]=useState([]);
@@ -12,27 +15,22 @@ const RecordsList = ({token}) => {
   const [detailPush,setDetailPush]=useState(null)
   // 初回のみ実行
   useEffect(() => {
-    // APIを呼び出す
-    fetch(`${API_BASE}records/`,{
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Token ${token}`
+    const shutoku = async ()=>{
+      try{
+        const data=await api('/records/',{
+          method: 'GET',
+        })
+        // 保存済みのstateのみ取得
+        const runninged = data.filter(record => record.timer_state===2 );
+        setRecords(runninged);  // data は配列のはず
+      }catch (err) {
+        console.error(err);
+        setErrors(err)
       }
-    })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return response.json(); // JSONデータを取得
-    })
-    .then((data) => {
-      console.log("Fetched records:", data);
-      // 保存済みのstateのみ取得
-      const runninged = data.filter(record => record.timer_state===2 );
-      setRecords(runninged);  // data は配列のはず
-    })
-    // エラーが出るとcatchでerrorに格納
-    .catch((error)=>console.error("Error fetching records:",error));
+        
+    }
+   shutoku()
+    
   },[detailPush]);
 
   return (
@@ -40,6 +38,12 @@ const RecordsList = ({token}) => {
     <div>
       {detailPush===null?(
         <div>
+          {/* 送信エラー */}
+          {errors.detail && (
+            <div className="text-danger mt-1">
+              <div>{errors.detail}</div>
+            </div>
+          )}
           <div className="table-responsive">
             <table className="table mb-0">
               <thead className="table-light"><tr><th>科目</th><th>時間</th><th>日時</th><th>詳細・編集・削除</th></tr></thead>

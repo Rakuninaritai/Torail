@@ -1,5 +1,8 @@
 import React, { useState } from 'react'
-
+// 使用しない
+// 使用しない
+// 使用しない
+// 使用しない
 const  RegistrationForm = ({onRegistered})=> {
   // Vite のケース
   const API_BASE = import.meta.env.VITE_API_BASE_URL

@@ -18,8 +18,9 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from main.views import UserViewSet, SubjectViewSet, TaskViewSet, RecordViewSet, LanguageViewSet
+from main.views import UserViewSet, SubjectViewSet, TaskViewSet, RecordViewSet, LanguageViewSet,CookieTokenObtainPairView,CookieLogoutView,CookieTokenRefreshView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from dj_rest_auth.views import UserDetailsView
 # urlsではAPIのエンドポイント(URLを決める)
 
 # defaultrouterでCRUDのAPIエンドポイントを自動で作ってくれる(手動でGE,POST等書かなくていい)
@@ -33,15 +34,15 @@ router.register(r'languages',LanguageViewSet)
 router.register(r'records',RecordViewSet)
 
 urlpatterns = [
-    # api/ならinclude先を確認
-    path("api/", include(router.urls), name=""),
-    # ログインしてアクセストークンとリフレッシュトークンを取得
-    path("api/token/",TokenObtainPairView.as_view(),name="token_obtain_pair"),
-    # リフトーでアクトーを更新
-    path("api/token/refresh/",TokenRefreshView.as_view(),name="token_refresh"),
-    # ユーザー認証用のエンドポイント
-    path('api/auth/', include('dj_rest_auth.urls')),
-    # ユーザー登録用のエンドポイント
+    # --- JWT Cookie 認証エンドポイント ---
+    path('api/token/',         CookieTokenObtainPairView.as_view(),  name='token_obtain_pair'),
+    path('api/token/refresh/', CookieTokenRefreshView.as_view(),      name='token_refresh'),
+    path('api/auth/logout/',   CookieLogoutView.as_view(),           name='rest_logout'),
+    # --- ユーザー情報の取得は dj-rest-auth の UserDetailsView ---
+    path('api/auth/user/',     UserDetailsView.as_view(),           name='rest_user_details'),
+    # --- 残りは既存のルーティング ---
+    path('api/auth/',          include('dj_rest_auth.urls')),
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
+    path('api/',               include(router.urls)),
     path("admin/", admin.site.urls),
 ]

@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     'rest_framework',  # Django REST Framework（API用）
     'rest_framework.authtoken',#ログイン後はトークンを持たせるがそのとき用
+    'rest_framework_simplejwt.token_blacklist',#tokenブラックリスト
     ###ソーシャルログイン用アカウント周り
     'django.contrib.sites',  # 必須：allauthのため
     'allauth',#djangoallauthの機能
@@ -74,17 +75,32 @@ MIDDLEWARE = [
     # djangoallauthでのログインログアウト管理用
     'allauth.account.middleware.AccountMiddleware',
 ]
-CORS_ALLOW_ALL_ORIGINS = True  # 全てのフロントエンドからのリクエストを許可（開発用）
 # django-allauth用
 SITE_ID=1
 # allauth用の設定達
 # メールアドレスの検証(メール確認リンク)をnone(本番mandatory)(送られてくるメールを踏んで初めて登録できるようになる)
 ACCOUNT_EMAIL_VERIFICATION = 'none'
+ACCOUNT_USERNAME_REQUIRED     = True        # ユーザー名必須フラグ
+ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE = True  # パスワード確認を要求するか
 # アカウントに認証はユーザー名で行う
 ACCOUNT_LOGIN_METHODS = {'username'}   # または 'email'
 # メルアドの登録は必須とする
 ACCOUNT_EMAIL_REQUIRED = True
+# メルアド重複排除
+ACCOUNT_UNIQUE_EMAIL = True
 
+# メール送信用のやつ
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+# 環境変数から読み込む（.env 等で管理）
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')       # 例: 'youraccount@gmail.com'
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')  # Gmail アプリパスワード
+# 送信元アドレス
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+SERVER_EMAIL       = EMAIL_HOST_USER
 
 ROOT_URLCONF = "Torail.urls"
 
@@ -167,12 +183,14 @@ AUTH_USER_MODEL = 'main.User'
 # 認証有効化
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        # ↓標準トークンによる認証
-        'rest_framework.authentication.TokenAuthentication',
-        # ↓JWTによる認証
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
+       'main.authentication.CookieJWTAuthentication', 
+        # 'dj_rest_auth.jwt_auth.JWTCookieAuthentication',    
+       # ブラウザでのデバッグ用に SessionAuthentication を残す場合 
+    #    'rest_framework.authentication.SessionAuthentication', 
+   ),
 }
+
+REST_USE_JWT = True
 
 # 認証の設定
 SIMPLE_JWT={
@@ -184,3 +202,37 @@ SIMPLE_JWT={
     # 一度使ったリフトーはブラックリスト行
     'BLACKLIST_AFTER_ROTATION':True
 }
+
+REST_AUTH = {
+    # 登録用シリアライザをカスタム版に差し替え
+    'REGISTER_SERIALIZER': 'main.serializers.CustomRegisterSerializer',
+}
+
+
+# ----- CORS / CSRF / Cookie の設定 -----
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    "https://torail.app",
+    "http://localhost:5173",  # ← 開発用
+]
+CSRF_TRUSTED_ORIGINS = [
+    "https://torail.app",
+    "http://localhost:5173",  # ← ここを必ず正確に
+]
+if DEBUG:
+    # 開発時：ローカルから自由に叩けるように
+    CORS_ALLOW_ALL_ORIGINS = True
+    CSRF_COOKIE_SECURE    = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SAMESITE  = 'Lax'
+    SESSION_COOKIE_SAMESITE = 'Lax'
+else:
+    # 本番時：自前ドメイン・フロント on HTTPS のみ許可
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGINS   = [
+        "https://torail.app",
+    ]
+    CSRF_COOKIE_SECURE    = True    # HTTPS でのみ送信
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SAMESITE  = 'Lax'   # 同一サイト外からのフォーム送信にも対応
+    SESSION_COOKIE_SAMESITE = 'Lax'

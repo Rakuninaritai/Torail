@@ -2,6 +2,11 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from .models import User, Subject, Task, Record, Language
 from .serializers import UserSerializer, SubjectSerializer, TaskSerializer, RecordWriteSerializer,RecordReadSerializer, LanguageSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
+from rest_framework.response import Response
+from dj_rest_auth.views import LogoutView
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.tokens import RefreshToken
 # viewsではどのでーたをどうやって取得、保存、更新、削除できるか決める
 
 # Userに対して
@@ -65,3 +70,83 @@ class RecordViewSet(viewsets.ModelViewSet):
   # データが作られるとき(POST時)userは今ログインしているユーザー(request.userになる)
   def perform_create(self, serializer):
     serializer.save(user=self.request.user)
+    
+# ログイン成功時tokenを発行してhttponlycookieにsetするビュー
+class CookieTokenObtainPairView(TokenObtainPairView):
+  def post(self,request,*args,**kwargs):
+    #まず標準処理でアクセストークン/リフレッシュトークンを得る
+    response = super().post(request,*args,**kwargs)
+    # cookieに設定
+    response.set_cookie(
+      'access_token',
+      response.data['access'],
+      httponly=True,
+      secure=False,#開発用
+      # secure=True,##本番用
+      # samesite='None'##本番用
+      samesite='Lax',
+      path='/',
+    )
+    response.set_cookie(
+        'refresh_token',
+        response.data['refresh'],
+        httponly=True,
+        secure=False,#開発
+        # secure=True,##本番用
+        # samesite='None'##本番用
+        samesite='Lax',
+        path='/',
+      )
+    # ボディからトークンを削除
+    response.data.pop('access',None)
+    response.data.pop('refresh',None)
+    return response
+  
+
+# リフレッシュ用
+class CookieTokenRefreshView(TokenRefreshView):
+    """
+    リフレッシュ時にも、新しい access_token を HttpOnly Cookie にセット。
+    """
+    def post(self, request, *args, **kwargs):
+        # 1) Cookie から refresh_token を取得
+        refresh = request.COOKIES.get('refresh_token')
+        if not refresh:
+            return Response({'detail': 'refresh token が見つかりません'}, status=400)
+        # 2) request.data に入れて super に委譲
+        request.data['refresh'] = refresh
+        # 通常のリフレッシュ
+        response = super().post(request, *args, **kwargs)
+        # Set-Cookie で上書き
+        response.set_cookie(
+            'access_token',
+            response.data['access'],
+            httponly=True,
+            secure=False,      # 本番は True
+            # secure=True,##本番用
+            # samesite='None'##本番用
+            samesite='Lax',
+            path='/',
+        )
+        # ボディからは隠す
+        response.data.pop('access', None)
+        return response
+      
+# ログアウト用
+class CookieLogoutView(LogoutView):
+    """
+    Logout するときは、HttpOnly Cookie を削除し、
+    リクエストに含まれていた refresh_token をブラックリスト化。
+    """
+    def post(self, request, *args, **kwargs):
+        # まず標準のブラックリスト処理
+        response = super().post(request, *args, **kwargs)
+        # クライアントから送られた Cookie を手動で取得
+        refresh = request.COOKIES.get('refresh_token')
+        if refresh:
+            # ブラックリスト化
+            RefreshToken(refresh).blacklist()
+        # Cookie を完全に削除
+        response.delete_cookie('access_token')
+        response.delete_cookie('refresh_token')
+        return response
