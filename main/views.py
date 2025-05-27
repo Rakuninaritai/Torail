@@ -81,20 +81,20 @@ class CookieTokenObtainPairView(TokenObtainPairView):
       'access_token',
       response.data['access'],
       httponly=True,
-      secure=False,#開発用
-      # secure=True,##本番用
-      # samesite='None'##本番用
-      samesite='Lax',
+      # secure=False,#開発用
+      secure=True,##本番用
+      samesite='None'##本番用
+      # samesite='Lax',
       path='/',
     )
     response.set_cookie(
         'refresh_token',
         response.data['refresh'],
         httponly=True,
-        secure=False,#開発
-        # secure=True,##本番用
-        # samesite='None'##本番用
-        samesite='Lax',
+        # secure=False,#開発
+        secure=True,##本番用
+        samesite='None'##本番用
+        # samesite='Lax',
         path='/',
       )
     # ボディからトークンを削除
@@ -122,10 +122,10 @@ class CookieTokenRefreshView(TokenRefreshView):
             'access_token',
             response.data['access'],
             httponly=True,
-            secure=False,      # 本番は True
-            # secure=True,##本番用
-            # samesite='None'##本番用
-            samesite='Lax',
+            # secure=False,      # 本番は True
+            secure=True,##本番用
+            samesite='None'##本番用
+            # samesite='Lax',
             path='/',
         )
         # ボディからは隠す
