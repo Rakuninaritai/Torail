@@ -19,7 +19,8 @@ class Subject(models.Model):
   name=models.CharField(max_length=100)
   # ユーザーは外部キーで引っ張ってきた
   user=models.ForeignKey(User,on_delete=models.CASCADE)
-  
+  class Meta:
+        unique_together = ('user', 'name')
   def __str__(self):
      return self.name
    
@@ -34,13 +35,16 @@ class Task(models.Model):
   # nameは課題名
   name=models.CharField(max_length=100)
   
+  class Meta:
+        unique_together = ('user', 'subject', 'name')
+  
   def __str__(self):
      return self.name
 # どの言語か(教科や課題に依存しない)
 class Language(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=50, unique=True)
-
+    
     def __str__(self):
         return self.name
 

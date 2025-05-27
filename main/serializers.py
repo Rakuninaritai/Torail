@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import User, Subject, Task, Record, Language
 from rest_framework.validators import UniqueValidator
 from dj_rest_auth.registration.serializers import RegisterSerializer
+from rest_framework.validators import UniqueTogetherValidator
 # シリアライザーはpythonをJSONにJSONをPYTHONに変換する役割がある
 # つまりフロントでも使えるようにする
 # Userモデルのシリアライザ
@@ -15,15 +16,33 @@ class UserSerializer(serializers.ModelSerializer):
     
 # Subjectモデルシリアライザ
 class SubjectSerializer(serializers.ModelSerializer):
+  # シリアライザ段階で request.user が入る
+  user = serializers.HiddenField(default=serializers.CurrentUserDefault())
   class Meta:
     model=Subject
-    fields=['id','name']
+    fields=['id','name','user']
+    validators = [
+            UniqueTogetherValidator(
+                queryset=Subject.objects.all(),
+                fields=['user', 'name'],
+                message='この教科は既に追加されています。'
+            )
+        ]
 
 # Taskモデルシリアライザ
 class TaskSerializer(serializers.ModelSerializer):
+  # シリアライザ段階で request.user が入る
+  user = serializers.HiddenField(default=serializers.CurrentUserDefault())
   class Meta:
     model=Task
-    fields=['id','name','subject']
+    fields=['id','name','subject','user']
+    validators = [
+            UniqueTogetherValidator(
+                queryset=Task.objects.all(),
+                fields=['user','subject' ,'name'],
+                message='この課題は既に追加されています。'
+            )
+        ]
 
 # Languageモデルシリアライザ
 class LanguageSerializer(serializers.ModelSerializer):

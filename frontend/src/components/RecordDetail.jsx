@@ -16,7 +16,8 @@ const RecordDetail = ({cf,rec,token}) => {
     subject:    rec.subject.id,
     task:       rec.task.id,
     language:   rec.language.id,
-    duration:      rec.duration,
+    duration:      rec.duration/1000/60,
+    // ↑分にしてる
     date:       rec.date,
     description:       rec.description,
   })
@@ -79,6 +80,7 @@ const RecordDetail = ({cf,rec,token}) => {
     // 送るデータにformとstart時刻を追加する
     const recordData={
       ...formData,
+      duration: formData.duration * 60 * 1000,
     }
     // postで送る
     try{
@@ -112,7 +114,7 @@ const RecordDetail = ({cf,rec,token}) => {
             <div key={i}>{msg}</div>
           ))}
         </div>)}
-      <form id="recordForm" onSubmit={e => e.preventDefault()} >
+      <form id="recordForm"  onSubmit={handleSubmit} >
         {/* 科目・課題・言語 */}
         <div className="row g-3 mb-3">
           <div className="col-md">
@@ -124,7 +126,6 @@ const RecordDetail = ({cf,rec,token}) => {
                 ))}
             </div>)}
             <select className='form-control ' name='subject' value={formData.subject} onChange={handleChange} disabled={!isEditing}>
-              <option value="">選択してください</option>
               {/* usestateのsubjectsをmap関数で1つをsubとして回す */}
               {subjects.map((sub)=>(
                 <option key={sub.id} value={sub.id}>{sub.name}</option>
@@ -140,7 +141,7 @@ const RecordDetail = ({cf,rec,token}) => {
                 ))}
             </div>)}
             <select  className='form-control ' name='task' value={formData.task} onChange={handleChange} disabled={!isEditing}>
-              <option value="">選択してください</option>
+              
               {filteredTasks.map((task)=>(
                 <option key={task.id} value={task.id}>{task.name}</option>
               ))}
@@ -155,7 +156,6 @@ const RecordDetail = ({cf,rec,token}) => {
                 ))}
             </div>)}
             <select  className='form-control ' name='language' value={formData.language} onChange={handleChange} disabled={!isEditing}>
-              <option value="">選択してください</option>
               {languages.map((task)=>(
                 <option key={task.id} value={task.id}>{task.name}</option>
               ))}
@@ -166,7 +166,7 @@ const RecordDetail = ({cf,rec,token}) => {
         {/* 時間・日付・開始時刻 */}
         <div className="row g-3 mb-3">
           <div className="col-md-4">
-            <label className="form-label" htmlFor="hours">学習時間 (ミリ秒)</label>
+            <label className="form-label" htmlFor="hours">学習時間 (分)</label>
             {errors.duration && (
               <div className="text-danger mt-1">
                 {errors.duration.map((msg, i) => (
@@ -181,7 +181,13 @@ const RecordDetail = ({cf,rec,token}) => {
               className="form-control"
               value={formData.duration }
               disabled={!isEditing}
+              min={0}//0以上
               onChange={handleChange}
+              inputMode="numeric"      // スマホで数字キーボードを開く
+              pattern="\d+"            // 数字（0–9）のみを許可
+              title="正の整数を入力してください"
+              onInvalid={e => e.target.setCustomValidity("正の整数を入力してください")}  //エラー時表示文字
+              onInput={e => e.target.setCustomValidity("")}  //クリア文字
             />
           </div>
           <div className="col-md-4">
@@ -232,7 +238,10 @@ const RecordDetail = ({cf,rec,token}) => {
               type="button"
               id="editBtn"
               className="btn btn-outline-primary"
-              onClick={onEdit}
+              onClick={()=>{
+                // マウスのmouseupが終わってから切り替える
+                window.requestAnimationFrame(() => onEdit());
+              }}
             >
               <i className="bi bi-pencil" /> 編集
             </button>
@@ -250,9 +259,10 @@ const RecordDetail = ({cf,rec,token}) => {
             <>
               <button
                 type="submit"
+                // type="button"
                 id="saveBtn"
                 className="btn btn-success"
-                onClick={handleSubmit}
+                // onClick={handleSubmit}
               >
                 <i className="bi bi-save" /> 保存
               </button>

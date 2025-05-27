@@ -44,15 +44,22 @@ const RecordsList = ({token}) => {
               <div>{errors.detail}</div>
             </div>
           )}
+          {/* ここに円グラフコンポーネント作る */}
+          {/* 絞り込み対象は二つ(日付(総作業時間)、言語、科目、さらに科目指定(課題)) */}
+          {/* 範囲は全期間、今月、今週、今日 */}
+          {/* もしかしたらdateの取得をグラフのコンポ根で実施して表示データ自体を絞るかも */}
+          <RecordsGraph records={records}/>
           <div className="table-responsive">
+            <h2>記録一覧</h2>
             <table className="table mb-0">
-              <thead className="table-light"><tr><th>科目</th><th>時間</th><th>日時</th><th>詳細・編集・削除</th></tr></thead>
+              <thead className="table-light"><tr><th>日時</th><th>科目</th><th>課題</th><th>時間</th><th>詳細・編集・削除</th></tr></thead>
               <tbody id="recordsBody">
                 {records.map((record)=>(
                 <tr key={record.id}>
                   <td>{record.date}</td>
+                  <td>{record.subject.name}</td>
                   <td>{record.task.name}</td>
-                  <td>{record.duration}分</td>
+                  <td>{record.duration/1000/60}分</td>
                   {/* 詳細ボタン */}
                   <td><RecordDetailBtn cf={setDetailPush} rec={record}/></td>
                 </tr>
@@ -60,11 +67,7 @@ const RecordsList = ({token}) => {
               </tbody>
             </table>
         </div>
-        {/* ここに円グラフコンポーネント作る */}
-        {/* 絞り込み対象は二つ(日付(総作業時間)、言語、科目、さらに科目指定(課題)) */}
-        {/* 範囲は全期間、今月、今週、今日 */}
-        {/* もしかしたらdateの取得をグラフのコンポ根で実施して表示データ自体を絞るかも */}
-        <RecordsGraph records={records}/>
+        
       </div>
       ):(<RecordDetail cf={setDetailPush} rec={detailPush} token={token}/>)}
       
