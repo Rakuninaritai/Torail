@@ -83,7 +83,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
       httponly=True,
       # secure=False,#開発用
       secure=True,##本番用
-      samesite='None'##本番用
+      samesite='None',##本番用
       # samesite='Lax',
       path='/',
     )
@@ -93,7 +93,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
         httponly=True,
         # secure=False,#開発
         secure=True,##本番用
-        samesite='None'##本番用
+        samesite='None',##本番用
         # samesite='Lax',
         path='/',
       )
@@ -124,7 +124,7 @@ class CookieTokenRefreshView(TokenRefreshView):
             httponly=True,
             # secure=False,      # 本番は True
             secure=True,##本番用
-            samesite='None'##本番用
+            samesite='None',##本番用
             # samesite='Lax',
             path='/',
         )
