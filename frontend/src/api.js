@@ -7,6 +7,11 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '');
  * ・HttpOnly Cookie (access, refresh) を自動で送受信
  * ・401 が返ってきたら一度だけ /token/refresh/ を叩いて再リクエスト
  */
+function hasRefreshToken() { 
+  return document.cookie 
+    .split(';') 
+    .some(c => c.trim().startsWith('refresh_token=')); 
+}
 export async function api(path, options = {}) {
   // path の先頭の「/」も潰しておく
   const cleanPath = path.replace(/^\/+/, '');
@@ -25,8 +30,12 @@ export async function api(path, options = {}) {
   // ① 本来のリクエスト
   let res = await fetch(url, config);
 
-  // ② 401 → リフレッシュ試行
-  if (res.status === 401 && !cleanPath.startsWith('token/refresh')) {
+ // ② 401 → （かつ refresh_token があるときだけ）リフレッシュ試行
+if ( 
+    res.status === 401 && 
+    !cleanPath.startsWith('token/refresh') && 
+    hasRefreshToken() 
+  ) {
     const refreshRes = await fetch(`${API_BASE}/token/refresh/`, {
       method: 'POST',
       credentials: 'include',

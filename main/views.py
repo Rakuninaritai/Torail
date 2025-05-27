@@ -6,7 +6,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
 from rest_framework.response import Response
 from dj_rest_auth.views import LogoutView
 from rest_framework_simplejwt.views import TokenRefreshView
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken,TokenError
 # viewsではどのでーたをどうやって取得、保存、更新、削除できるか決める
 
 # Userに対して
@@ -135,18 +135,26 @@ class CookieTokenRefreshView(TokenRefreshView):
 # ログアウト用
 class CookieLogoutView(LogoutView):
     """
-    Logout するときは、HttpOnly Cookie を削除し、
-    リクエストに含まれていた refresh_token をブラックリスト化。
+    HttpOnly Cookie を削除しつつ、
+    refresh_token をブラックリスト化する。
     """
     def post(self, request, *args, **kwargs):
-        # まず標準のブラックリスト処理
+        # ① 通常の dj-rest-auth Logout 処理
         response = super().post(request, *args, **kwargs)
-        # クライアントから送られた Cookie を手動で取得
+
+        # ② Cookie からリフレッシュ・トークンを取得
         refresh = request.COOKIES.get('refresh_token')
         if refresh:
-            # ブラックリスト化
-            RefreshToken(refresh).blacklist()
-        # Cookie を完全に削除
+            try:
+                # すでに blacklist 済みでも例外を握り潰す
+                token = RefreshToken(refresh)
+                token.blacklist()
+            except TokenError:
+                pass
+
+        # ③ Cookie を完全に削除
         response.delete_cookie('access_token')
         response.delete_cookie('refresh_token')
         return response
+      
+      

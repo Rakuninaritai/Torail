@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 
-const RegisterForm = ({onLoginSuccess,settoken}) => {
+const RegisterForm = ({onLoginSuccess,settoken,hc}) => {
   // Vite のケース
     const API_BASE = import.meta.env.VITE_API_BASE_URL
     // 送るやつのstate
@@ -51,6 +51,9 @@ const RegisterForm = ({onLoginSuccess,settoken}) => {
     <div className='timer-card mx-auto'>
       <form onSubmit={handleSubmit}>
         <h2>登録</h2>
+        <div className="d-flex justify-content-center gap-3 mt-3">
+          <button type='button'  className="btn btn-dark btn-md" onClick={()=>hc()}   >ログインはこちら</button>
+        </div>
         {/* 送信エラー */}
           {errors.detail && (
             <div className="text-danger mt-1">

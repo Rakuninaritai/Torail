@@ -59,7 +59,7 @@ INSTALLED_APPS = [
     'dj_rest_auth.registration',#ユーザー登録用のエンドポイント用
     ###
     "main",
-    "corsheaders"#djangoがフロント(react)のアクセスを許可するよう
+    "corsheaders",#djangoがフロント(react)のアクセスを許可するよう,
 ]
 
 MIDDLEWARE = [
