@@ -1,9 +1,12 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, permissions
 from rest_framework.permissions import IsAuthenticated
-from .models import User, Subject, Task, Record, Language
-from .serializers import UserSerializer, SubjectSerializer, TaskSerializer, RecordWriteSerializer,RecordReadSerializer, LanguageSerializer
+from django.db import models
+from .models import User, Subject, Task, Record, Language,Team, TeamMembership, TeamInvitation
+from .serializers import UserSerializer, SubjectSerializer, TaskSerializer, RecordWriteSerializer,RecordReadSerializer, LanguageSerializer,TeamSerializer, TeamMembershipSerializer,TeamInvitationSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
+from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
 from dj_rest_auth.views import LogoutView
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken,TokenError
@@ -49,17 +52,63 @@ class LanguageViewSet(viewsets.ModelViewSet):
   serializer_class = LanguageSerializer
   permission_classes = [IsAuthenticated]
 
+class IsTeamMember(permissions.BasePermission):
+    """
+    チーム関連オブジェクト（Team, Record.team!=None）へのアクセス制御
+    - チームのオーナー or membership に含まれるユーザーのみ許可
+    """
+    def has_object_permission(self, request, view, obj):
+        # チームオブジェクトなら owner or membership に含まれるか
+        if isinstance(obj, Team):
+            return (
+                obj.owner == request.user or
+                obj.memberships.filter(user=request.user).exists()
+            )
+        # レコードオブジェクトで team が設定済みなら同様にチェック
+        if isinstance(obj, Record) and obj.team:
+            team = obj.team
+            return (
+                team.owner == request.user or
+                team.memberships.filter(user=request.user).exists()
+            )
+        # 個人レコード（team=None）は IsAuthenticated で OK
+        return True
+
+
+class TeamViewSet(viewsets.ModelViewSet):
+    """
+    /api/teams/ エンドポイント
+    - GET: 自分がオーナー or メンバーのチームを返却
+    - POST: 新規チーム作成（owner=request.user）
+    """
+    queryset = Team.objects.all()
+    serializer_class = TeamSerializer
+    permission_classes = [IsAuthenticated, IsTeamMember]
+
+    def get_queryset(self):
+        return Team.objects.filter(
+            models.Q(owner=self.request.user) |
+            models.Q(memberships__user=self.request.user)
+        ).distinct()
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
 # Record
 class RecordViewSet(viewsets.ModelViewSet):
   # クエリセットはclassが定義された段階で呼ばれる(必要)noneでも
   # get_quarysetはリクエストがあった段階で呼ばれる
   queryset=Record.objects.none()
   # queryset=Record.objects.all()
-  permission_classes=[IsAuthenticated]
+  permission_classes=[IsAuthenticated,IsTeamMember]
   
   def get_queryset(self):
-    # 今ログインしているユーザーのデータを取得する
-    return Record.objects.filter(user=self.request.user)
+    user = self.request.user
+    qs = Record.objects.filter(user=user)
+    team_id = self.request.query_params.get('team')
+    if team_id:
+        return qs.filter(team__id=team_id)
+    return qs.filter(team__isnull=True)
   
   # actionの種類によって使うシリアライザを分ける(読取書き込み)
   def get_serializer_class(self):
@@ -156,5 +205,38 @@ class CookieLogoutView(LogoutView):
         response.delete_cookie('access_token')
         response.delete_cookie('refresh_token')
         return response
-      
-      
+
+
+
+
+class TeamInvitationViewSet(viewsets.ModelViewSet):
+    """
+    /api/invitations/
+    - POST: team.owner のみ招待可能
+    - GET: 自分が受け取った招待 or 自分が送った招待を確認
+    - accept: 招待承認アクション
+    """
+    queryset = TeamInvitation.objects.all()
+    serializer_class = TeamInvitationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        team = serializer.validated_data['team']
+        if team.owner != self.request.user:
+            raise PermissionDenied("招待はオーナーのみ可能です")
+        serializer.save(invited_by=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def accept(self, request, pk=None):
+        inv = self.get_object()
+        # 招待対象ユーザーのみ承認可
+        if inv.invited_user != request.user:
+            raise PermissionDenied("他ユーザーの招待は承認できません")
+        inv.accepted = True
+        inv.save()
+        # 承認時に membership レコードを作成
+        TeamMembership.objects.create(team=inv.team, user=request.user)
+        return Response({'status': 'joined'})
+
+
+#   エラー対応行った後モデル図シリアらーざviewurls理解

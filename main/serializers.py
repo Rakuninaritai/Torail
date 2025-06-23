@@ -1,18 +1,39 @@
 from rest_framework import serializers
-from .models import User, Subject, Task, Record, Language
+from .models import User, Subject, Task, Record, Language,Team, TeamMembership, TeamInvitation
+from django.contrib.auth import get_user_model
 from rest_framework.validators import UniqueValidator
 from dj_rest_auth.registration.serializers import RegisterSerializer
 from rest_framework.validators import UniqueTogetherValidator
+User = get_user_model()
 # シリアライザーはpythonをJSONにJSONをPYTHONに変換する役割がある
 # つまりフロントでも使えるようにする
 # Userモデルのシリアライザ
 class UserSerializer(serializers.ModelSerializer):
+  # GET時は受け取らずPOST/PATCH 時だけ受け取るフィールドになります
+  password = serializers.CharField(write_only=True, required=False)
   # metaで指定
   class Meta:
     # モデルはユーザー
     model=User
     # フィールドで指定したものだけがjsonに
-    fields=['id','username','email']
+    fields=['id','username','email','password']
+    # patchで呼ばれるupdate
+    # 引数はself(シリアライザ自体のインスタンスどのモデル使うかなど)instance(どのレコードを更新するか)validated_data(送られてきたデータ)
+  def update(self, instance, validated_data):
+      # validated_data から password を取り出し
+      pwd = validated_data.pop('password', None)
+
+      # username, email の通常更新
+      for attr, val in validated_data.items():
+          setattr(instance, attr, val)
+
+      # password が渡ってきていれば set_password でハッシュ化
+      if pwd:
+          instance.set_password(pwd)
+
+      instance.save()
+      return instance
+
     
 # Subjectモデルシリアライザ
 class SubjectSerializer(serializers.ModelSerializer):
@@ -73,9 +94,15 @@ class RecordWriteSerializer(serializers.ModelSerializer):
                                               allow_null=True,      # nullを許可する
                                               required=False        # 必須ではない
   )
+  # 書き込み時にチーム指定を可能にする
+  team = serializers.PrimaryKeyRelatedField(
+      queryset=Team.objects.all(),
+      allow_null=True,
+      required=False
+  )
   class Meta:
     model=Record
-    fields=[ 'subject', 'task', 'language', 'date', 'description', 'duration', 'start_time', 'end_time','stop_time','timer_state']
+    fields=[ 'subject', 'task', 'language', 'date', 'description', 'duration', 'start_time', 'end_time','stop_time','timer_state','team']
     
     
 # メルアド重複を500エラーではなく400エラーで出すためのシリアライザ
@@ -95,3 +122,29 @@ class CustomRegisterSerializer(RegisterSerializer):
         data = super().get_cleaned_data()
         data['email'] = self.validated_data.get('email', '')
         return data
+      
+
+class TeamSerializer(serializers.ModelSerializer):
+    owner = serializers.StringRelatedField(read_only=True)  # オーナー名を文字列で返却
+
+    class Meta:
+        model = Team
+        fields = ['id', 'name', 'owner', 'created_at']
+
+
+class TeamMembershipSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = TeamMembership
+        fields = ['id', 'team', 'user', 'joined_at']
+
+
+class TeamInvitationSerializer(serializers.ModelSerializer):
+    invited_user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+
+    class Meta:
+        model = TeamInvitation
+        # invited_by, token, accepted, created_at は読み取り専用
+        read_only_fields = ['invited_by', 'token', 'accepted', 'created_at']
+        fields = ['id', 'team', 'invited_user', 'invited_by', 'token', 'accepted', 'created_at']

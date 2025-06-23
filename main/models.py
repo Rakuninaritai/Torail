@@ -1,6 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 import uuid
+from django.conf import settings
+
+User = settings.AUTH_USER_MODEL  # 抽象化したカスタムユーザーモデルを参照
 # ユーザーモデルをカスタムしている
 # idをUUIDにすることで整数よりも複雑化させてる。(idを主キー化、デフォルトでuuidが設定される、管理画面での編集false)
 class User(AbstractUser):
@@ -48,6 +51,27 @@ class Language(models.Model):
     def __str__(self):
         return self.name
 
+
+    
+    
+class Team(models.Model):
+    """
+    チーム情報
+    - owner: 作成者（オーナー）
+    - name: 画面表示用チーム名（ユニーク）
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField('チーム名', max_length=100, unique=True)
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='owned_teams'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
 # 記録登録用レコード
 class Record(models.Model):
   id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -69,6 +93,66 @@ class Record(models.Model):
   timer_state=models.IntegerField(default=0)
   # 再開時刻を記録(starttimeではなくこれから差分を取るため)
   stop_time=models.DateTimeField(blank=True,null=True)
+  team = models.ForeignKey(
+      Team,
+      on_delete=models.CASCADE,
+      null=True, blank=True,
+      related_name='records',
+      help_text='チーム記録なら team にセット、個人記録は NULL'
+  )
+    # こうすることで Record.team が None → 個人／Not None → チーム に振り分けられる
 
   def __str__(self):
       return f"{self.user.username} - {self.task.name} ({self.duration} min)"
+class TeamMembership(models.Model):
+    """
+    チームメンバーシップ
+    - team ＋ user の組み合わせをユニーク化して、複数招待/参加を防止
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.CASCADE,
+        related_name='memberships'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='team_memberships'
+    )
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('team', 'user')
+
+
+class TeamInvitation(models.Model):
+    """
+    チーム招待
+    - invited_user: 招待対象ユーザー
+    - invited_by: 招待発行者（必ず team.owner）
+    - token: 承認リンク等で利用する UUID トークン
+    - accepted: 承認済みフラグ
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.CASCADE,
+        related_name='invitations'
+    )
+    invited_user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='invitations_received'
+    )
+    invited_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='invitations_sent'
+    )
+    token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    accepted = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ('team', 'invited_user')

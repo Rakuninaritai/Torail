@@ -18,7 +18,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from main.views import UserViewSet, SubjectViewSet, TaskViewSet, RecordViewSet, LanguageViewSet,CookieTokenObtainPairView,CookieLogoutView,CookieTokenRefreshView
+from main.views import UserViewSet, SubjectViewSet, TaskViewSet, RecordViewSet, LanguageViewSet,CookieTokenObtainPairView,CookieLogoutView,CookieTokenRefreshView,TeamViewSet, TeamInvitationViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from dj_rest_auth.views import UserDetailsView
 
@@ -33,6 +33,8 @@ router.register(r'subjects',SubjectViewSet)
 router.register(r'tasks',TaskViewSet)
 router.register(r'languages',LanguageViewSet)
 router.register(r'records',RecordViewSet)
+router.register(r'teams', TeamViewSet)         
+router.register(r'invitations', TeamInvitationViewSet)  
 
 urlpatterns = [
     # --- JWT Cookie 認証エンドポイント ---

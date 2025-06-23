@@ -1,19 +1,19 @@
 // src/api.js
-const API_BASE = import.meta.env.VITE_API_BASE_URL.replace(/\/$/, ''); 
-// 末尾の「/」を勝手に落としておく
+const API_BASE = import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '');
 
 /**
  * 汎用 fetch ヘルパー
  * ・HttpOnly Cookie (access, refresh) を自動で送受信
- * ・401 が返ってきたら一度だけ /token/refresh/ を叩いて再リクエスト
+ * ・401 が返ってきたら一度だけ /token/refresh/ を叩いて再リクエスト、
+ *   成功したら Authorization ヘッダーに新しい access をセット
  */
-function hasRefreshToken() { 
-  return document.cookie 
-    .split(';') 
-    .some(c => c.trim().startsWith('refresh_token=')); 
+function hasRefreshToken() {
+  return document.cookie
+    .split(';')
+    .some(c => c.trim().startsWith('refresh_token='));
 }
+
 export async function api(path, options = {}) {
-  // path の先頭の「/」も潰しておく
   const cleanPath = path.replace(/^\/+/, '');
   const url = `${API_BASE}/${cleanPath}`;
 
@@ -30,21 +30,27 @@ export async function api(path, options = {}) {
   // ① 本来のリクエスト
   let res = await fetch(url, config);
 
- // ② 401 → （かつ refresh_token があるときだけ）リフレッシュ試行
-if ( 
-    res.status === 401 && 
-    !cleanPath.startsWith('token/refresh') && 
-    hasRefreshToken() 
+  // ② 401 → （かつ refresh_token があるときだけ）リフレッシュ試行
+  if (
+    res.status === 401 &&
+    !cleanPath.startsWith('token/refresh') &&
+    hasRefreshToken()
   ) {
     const refreshRes = await fetch(`${API_BASE}/token/refresh/`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      // body は空で OK（Cookie の中の refresh_token を使う）
       body: JSON.stringify({}),
     });
+
     if (refreshRes.ok) {
-      // 成功したら再度オリジナルエンドポイントを呼ぶ
+      // 新しいアクセストークンを取得してヘッダーにセット
+      const { access } = await refreshRes.json();
+      config.headers = {
+        ...config.headers,
+        Authorization: `Bearer ${access}`,
+      };
+      // 再リクエスト
       res = await fetch(url, config);
     } else {
       // リフレッシュ失敗 → 強制ログイン画面へ
@@ -54,9 +60,8 @@ if (
   }
 
   // ③ JSON パース
-  const data = (res.status === 204)
-  ? null            // or {}／[]など、好みで
-  : await res.json()
+  const data = res.status === 204 ? null : await res.json();
+
   // ④ ステータスチェック
   if (!res.ok) {
     // 400/500 系は呼び出し元にそのまま投げる

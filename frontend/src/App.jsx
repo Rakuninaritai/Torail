@@ -13,6 +13,7 @@ import Login_Register from "./pages/Login_Register";
 import { api } from "./api";
 import { useNavigate } from 'react-router-dom';
 import logo from "../src/assets/TorailLOGO.png"
+import Settings from "./pages/Settings";
 function App() {
   const navigate = useNavigate();
   // この値が変わったらレコードが更新されたことにする
@@ -85,6 +86,16 @@ function App() {
               <i className="bi bi-bar-chart-line-fill"></i> 統計
             </NavLink>
             )}
+            {Token && (
+              <NavLink
+              to="/settings"
+              className={({ isActive }) =>
+              isActive ? 'nav-link active' : 'nav-link'
+            }
+            >
+              <i className="bi bi-gear"></i> 設定
+            </NavLink>
+            )}
         </div>
         {/* ログアウト */}
         {Token && (
@@ -153,6 +164,16 @@ function App() {
             </NavLink>
             )}
             {Token && (
+              <NavLink
+              to="/settings"
+              className={({ isActive }) =>
+              isActive ? 'nav-link active' : 'nav-link'
+            }
+            >
+              <i className="bi bi-gear"></i> 設計
+            </NavLink>
+            )}
+            {Token && (
               <LogoutBtn
                 className="nav-link mt-3 text-white"
                 onLogoutSuccess={handleLogoutSuccess}
@@ -206,6 +227,15 @@ function App() {
             element={
               Token
                 ? <Records token={Token} koushin={refreshRecords} />
+                : <Login_Register onLoginSuccess={handleLoginSuccess} settoken={setToken} />
+            }
+          />
+          {/* 設定画面 */}
+          <Route
+            path="/settings"
+            element={
+              Token
+                ? <Settings/>
                 : <Login_Register onLoginSuccess={handleLoginSuccess} settoken={setToken} />
             }
           />
