@@ -239,4 +239,4 @@ class TeamInvitationViewSet(viewsets.ModelViewSet):
         return Response({'status': 'joined'})
 
 
-#   エラー対応行った後モデル図シリアらーざviewurls理解
+#   モデル図シリアらーざviewurls理解

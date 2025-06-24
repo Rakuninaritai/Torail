@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset
+      xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
+                          http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+
+  <!-- ホーム -->
+  <url>
+    <loc>https://Torail.App</loc>
+    <lastmod>2025-06-24</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- ログイン／会員登録 -->
+  <url>
+    <loc>https://Torail.App/login_register</loc>
+    <lastmod>2025-06-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- 測定（学習記録追加） -->
+  <url>
+    <loc>https://Torail.App/addrecords</loc>
+    <lastmod>2025-06-24</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- 統計（記録一覧・グラフ表示） -->
+  <url>
+    <loc>https://Torail.App/records</loc>
+    <lastmod>2025-06-24</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+</urlset>
