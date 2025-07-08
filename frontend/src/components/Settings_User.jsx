@@ -2,8 +2,12 @@ import React, { useEffect } from 'react'
 import { useState } from 'react';
 import { api } from "../api";
 import { Navigate, useNavigate } from 'react-router-dom';
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
+import { toast } from 'react-toastify';
 
 const Settings_User = () => {
+  const [isLoading, setLoading] = useState(false);
   const navigate = useNavigate(); 
   const [formData, setFormData] = useState({ username: '', email: '', password: '' });
   // 引っ張ってきたデータ(こいつがformdataと一緒なら送らない)
@@ -13,6 +17,7 @@ const Settings_User = () => {
   const [errors,setErrors]=useState("")
   useEffect(()=>{
     const shutoku = async ()=>{
+              setLoading(true)
               try{
                 const ss=await api('/auth/user/',{
                   method: 'GET',
@@ -30,8 +35,10 @@ const Settings_User = () => {
                     password: '',  // パスワードは空で初期化
                     pk:ss.pk,
                   })
+                  setLoading(false)
               }catch (err) {
-                console.error(err);
+                // console.error(err);
+                setLoading(false)
                 setErrors(err)
               }
                 
@@ -45,16 +52,21 @@ const Settings_User = () => {
       // 確認ダイアログ
       const result=window.confirm("本当に削除してもよいですか。")
       if (result){
+        setLoading(true)
         // DELETE リクエストを使って、既存のレコードを削除する
         try{
             const data=await api(`/users/${initialData.pk}/`,{
             method: 'DELETE',
             })
-            console.log("削除が完了しました。",data)
+            // console.log("削除が完了しました。",data)
+            toast.success("削除が完了しました!")
+            setLoading(false)
             // replacetrueで履歴付けずにリダイレクト
             navigate('/', { replace: true });
             }catch(err){
-              console.error(err);
+              // console.error(err);
+              toast.error("削除に失敗しました。")
+              setLoading(false)
               setErrors(err)
             }
       }
@@ -83,21 +95,26 @@ const Settings_User = () => {
     console.log(recordData)
     // 送る
     try{
+        setLoading(true)
         const data=await api(`/users/${initialData.pk}/`,{
         method: 'PATCH',
         body:JSON.stringify(recordData),
         })
-        console.log("ユーザー情報が更新されました",data)
+        // console.log("ユーザー情報が更新されました",data)
+        toast.success("ユーザー情報が更新されました!")
+        setLoading(false)
         handleEdit()
         }catch(err){
-          console.error(err);
+          // console.error(err);
+          toast.error("ユーザー情報の更新に失敗しました。")
+          setLoading(false)
           setErrors(err)
         }
   }
   return (
     <div className='timer-card mx-auto'>
       <form onSubmit={handleSubmit}>
-        <h2>プロフィール</h2>
+        <h2>ユーザー編集・削除</h2>
         {/* 送信エラー */}
           {errors.detail && (
             <div className="text-danger mt-1">
@@ -111,73 +128,78 @@ const Settings_User = () => {
               <div key={i}>{msg}</div>
             ))}
           </div>)}
-        <label  htmlFor="username" className="form-label">ユーザー名</label>
-          <input type="text" className='form-control mb-3' name='username' value={formData.username} onChange={handleChange} required disabled={!isEditing}/>
-          {errors.username && (
-            <div className="text-danger mt-1">
-              {errors.username.map((msg, i) => (
-                <div key={i}>{msg}</div>
-              ))}
-            </div>
-          )}
-        
-        <br />
-        <label  htmlFor="email" className="form-label">メールアドレス</label>
-          <input type="email" className='form-control mb-3' name='email' value={formData.email} onChange={handleChange} required disabled={!isEditing}/>
-          {errors.email && (
-            <div className="text-danger mt-1">
-              {errors.email.map((msg, i) => (
-                <div key={i}>{msg}</div>
-              ))}
-            </div>
-          )}
-        
-        <br />
-        <label   htmlFor="password" className="form-label">パスワード</label>
-          <small  className="form-text text-muted  d-block">8文字以上で、大文字と数字を含めてください</small>
-          <input type="password" className='form-control mb-3' name='password' value={formData.password} onChange={handleChange}  minLength={8}
-          pattern="(?=.*[A-Z])(?=.*\d).+"
-          title="パスワードは8文字以上で、大文字と数字を含めてください"
-          onInvalid={e => e.target.setCustomValidity("8文字以上で、大文字と数字を含む必要があります")}
-          onInput={e => e.target.setCustomValidity("")} disabled={!isEditing}/>
-          {errors.password1 && (
-            <div className="text-danger mt-1">
-              {errors.password1.map((msg, i) => (
-                <div key={i}>{msg}</div>
-              ))}
-            </div>
-          )}
-        
-        
-        <div className="d-flex justify-content-center gap-3 mt-3">
-          {!isEditing ? (
-                <button
-                  type="button"
-                  className="btn btn-outline-primary"
-                  onClick={()=>{
-                  // マウスのmouseupが終わってから切り替える
-                  window.requestAnimationFrame(() => handleEdit());
-              }}
-                >
-                  <i className="bi bi-pencil" /> 編集
-                </button>
-              ) : (
-                <>
-                  <button id="startBtn"  type='submit' className="btn btn-info btn-lg"><i className="bi bi-door-open"></i></button>
+        {isLoading?<Skeleton/>:(
+          <>
+              <label  htmlFor="username" className="form-label">ユーザー名</label>
+            <input type="text" className='form-control mb-3' name='username' value={formData.username} onChange={handleChange} required disabled={!isEditing}/>
+            {errors.username && (
+              <div className="text-danger mt-1">
+                {errors.username.map((msg, i) => (
+                  <div key={i}>{msg}</div>
+                ))}
+              </div>
+            )}
+          
+          <br />
+          <label  htmlFor="email" className="form-label">メールアドレス</label>
+            <input type="email" className='form-control mb-3' name='email' value={formData.email} onChange={handleChange} required disabled={!isEditing}/>
+            {errors.email && (
+              <div className="text-danger mt-1">
+                {errors.email.map((msg, i) => (
+                  <div key={i}>{msg}</div>
+                ))}
+              </div>
+            )}
+          
+          <br />
+          <label   htmlFor="password" className="form-label">パスワード</label>
+            <small  className="form-text text-muted  d-block">8文字以上で、大文字と数字を含めてください</small>
+            <input type="password" className='form-control mb-3' name='password' value={formData.password} onChange={handleChange}  minLength={8}
+            pattern="(?=.*[A-Z])(?=.*\d).+"
+            title="パスワードは8文字以上で、大文字と数字を含めてください"
+            onInvalid={e => e.target.setCustomValidity("8文字以上で、大文字と数字を含む必要があります")}
+            onInput={e => e.target.setCustomValidity("")} disabled={!isEditing}/>
+            {errors.password1 && (
+              <div className="text-danger mt-1">
+                {errors.password1.map((msg, i) => (
+                  <div key={i}>{msg}</div>
+                ))}
+              </div>
+            )}
+          
+          
+          <div className="d-flex justify-content-center gap-3 mt-3">
+            {!isEditing ? (
                   <button
                     type="button"
-                    onClick={handleEdit}
-                    className="btn btn-secondary"
+                    className="btn btn-outline-primary"
+                    onClick={()=>{
+                    // マウスのmouseupが終わってから切り替える
+                    window.requestAnimationFrame(() => handleEdit());
+                }}
                   >
-                    キャンセル
+                    <i className="bi bi-pencil" /> 編集
                   </button>
-                  <button className="btn btn-outline-danger btn-lg"   onClick={handleDelete}>
-                    <i className="bi bi-trash"></i>
-                  </button>
-                </>
-              )}
-          
-        </div>
+                ) : (
+                  <>
+                    <button id="startBtn"  type='submit' className="btn btn-info btn-lg"><i className="bi bi-door-open"></i></button>
+                    <button
+                      type="button"
+                      onClick={handleEdit}
+                      className="btn btn-secondary"
+                    >
+                      キャンセル
+                    </button>
+                    <button className="btn btn-outline-danger btn-lg"   onClick={handleDelete}>
+                      <i className="bi bi-trash"></i>
+                    </button>
+                  </>
+                )}
+            
+          </div>
+          </>
+        )}
+        
         {/* {message&&<p>{message}</p>} */}
       </form>
     </div>

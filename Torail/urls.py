@@ -19,8 +19,10 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from main.views import UserViewSet, SubjectViewSet, TaskViewSet, RecordViewSet, LanguageViewSet,CookieTokenObtainPairView,CookieLogoutView,CookieTokenRefreshView,TeamViewSet, TeamInvitationViewSet
+#IntegrationViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from dj_rest_auth.views import UserDetailsView
+# from main.tsuchi_tsukawan.integrations import discord_callback,discord_oauth_url,discord_channels
 
 # urlsではAPIのエンドポイント(URLを決める)
 
@@ -35,6 +37,7 @@ router.register(r'languages',LanguageViewSet)
 router.register(r'records',RecordViewSet)
 router.register(r'teams', TeamViewSet)         
 router.register(r'invitations', TeamInvitationViewSet)  
+# router.register(r'integrations', IntegrationViewSet, basename='integration')
 
 urlpatterns = [
     # --- JWT Cookie 認証エンドポイント ---
@@ -47,5 +50,8 @@ urlpatterns = [
     path('api/auth/',          include('dj_rest_auth.urls')),
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
     path('api/',               include(router.urls)),
+    # path("api/integrations/discord/url/", discord_oauth_url),
+    # path('api/integrations/discord/callback/', discord_callback),
+    # path("api/integrations/discord/channels",  discord_channels),
     path("admin/", admin.site.urls),
 ]

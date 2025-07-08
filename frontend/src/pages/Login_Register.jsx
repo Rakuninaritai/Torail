@@ -3,6 +3,7 @@ import LoginForm from '../components/LoginForm'
 import RegisterForm from '../components/RegisterForm'
 
 const Login_Register = ({onLoginSuccess,settoken}) => {
+  document.title="Torail|ログイン/会員登録"
   const [Login,setLogin]=useState(true)
   const handleChange=()=>{
     setLogin(!Login)

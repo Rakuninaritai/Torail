@@ -1,6 +1,10 @@
 import React, { useState } from 'react'
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
+import { toast } from 'react-toastify';
 
 const RegisterForm = ({onLoginSuccess,settoken,hc}) => {
+    const [isLoading, setLoading] = useState(false);
   // Vite のケース
     const API_BASE = import.meta.env.VITE_API_BASE_URL
     // 送るやつのstate
@@ -16,6 +20,7 @@ const RegisterForm = ({onLoginSuccess,settoken,hc}) => {
   
     // 送信ボタン押されたら動作
     const handleSubmit = async (e)=>{
+      setLoading(true)
       e.preventDefault()
       try {
         // ① fetch 実行
@@ -32,18 +37,24 @@ const RegisterForm = ({onLoginSuccess,settoken,hc}) => {
         // ③ 400 系ならエラー state にセットして抜ける
         if (!res.ok) {
           setErrors(data)
-          console.log(data)
+          // console.log(data)
+          toast.error("エラーが発生しました。")
+          setLoading(false)
           return
         }
 
         // ④ 成功時の処理
-        console.log('Registration successful:', data)
+        // console.log('Registration successful:', data)
+        toast.success("登録成功です!")
+        setLoading(false)
         settoken(data.key)
         onLoginSuccess&&onLoginSuccess()
     } catch (err) {
       // ネットワークエラー等
-      console.error('Network or unexpected error:', err)
+      // console.error('Network or unexpected error:', err)
       setErrors({non_field_errors:"通信エラーが発生しました。再度お試しください。"})
+      toast.error("通信エラーが発生しました。")
+      setLoading(false)
     }
     }
   
@@ -68,7 +79,9 @@ const RegisterForm = ({onLoginSuccess,settoken,hc}) => {
             ))}
           </div>)}
         <label  htmlFor="username" className="form-label">ユーザー名</label>
-          <input type="text" className='form-control mb-3' name='username' value={credentials.username} onChange={handleChange} required />
+        <small  className="form-text text-muted  d-block">半角英数記号のみで入力してください。</small>
+          <input type="text" className='form-control mb-3' name='username' value={credentials.username} onChange={handleChange} required autoComplete="username" pattern="[!-~]+"
+          title="半角英数字・記号（!～~）のみで入力してください。"/>
           {errors.username && (
             <div className="text-danger mt-1">
               {errors.username.map((msg, i) => (
@@ -95,7 +108,8 @@ const RegisterForm = ({onLoginSuccess,settoken,hc}) => {
           pattern="(?=.*[A-Z])(?=.*\d).+"
           title="パスワードは8文字以上で、大文字と数字を含めてください"
           onInvalid={e => e.target.setCustomValidity("8文字以上で、大文字と数字を含む必要があります")}
-          onInput={e => e.target.setCustomValidity("")}/>
+          onInput={e => e.target.setCustomValidity("")}
+          autoComplete="new-password"/>
           {errors.password1 && (
             <div className="text-danger mt-1">
               {errors.password1.map((msg, i) => (
@@ -107,7 +121,7 @@ const RegisterForm = ({onLoginSuccess,settoken,hc}) => {
         <br />
         <label   htmlFor="password2" className="form-label">パスワード(確認用)</label>
           <small  className="form-text text-muted  d-block">上と同じパスワードを入力してください</small>
-          <input type="password" className='form-control mb-3' name='password2' value={credentials.password2} onChange={handleChange} required />
+          <input type="password" className='form-control mb-3' name='password2' value={credentials.password2} onChange={handleChange} required  autoComplete="new-password"/>
           {errors.password2 && (
             <div className="text-danger mt-1">
               {errors.password2.map((msg, i) => (
@@ -118,7 +132,10 @@ const RegisterForm = ({onLoginSuccess,settoken,hc}) => {
         
         <br />
         <div className="d-flex justify-content-center gap-3 mt-3">
-          <button id="startBtn"  type='submit' className="btn btn-info btn-lg"><i className="bi bi-door-open"></i></button>
+          {isLoading?<Skeleton/>:(
+            <button id="startBtn"  type='submit' className="btn btn-info btn-lg"><i className="bi bi-door-open"></i></button>
+          )}
+          
         </div>
         {/* {message&&<p>{message}</p>} */}
       </form>

@@ -1,12 +1,18 @@
-import React, { useState } from 'react'
+import React, { useState, useSyncExternalStore } from 'react'
+import { useTeam } from '../context/TeamContext'
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
+import { toast } from 'react-toastify';
 
 const LoginForm = ({onLoginSuccess,settoken,hc}) => {
+  const [isLoading, setLoading] = useState(false);
   // Vite のケース
   const API_BASE = import.meta.env.VITE_API_BASE_URL
   // 送るやつのstate
   const [credentials,setCredentials]=useState({username:"",password:""})
   // エラー表示などのmessagestate
   const [errors,setErrors]=useState("")
+  const { refreshTeams } = useTeam()
 
   // input変わるとデータ取得
   const handleChange=(e)=>{
@@ -16,6 +22,7 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
 
   // 送信ボタン押されたら動作
     const handleSubmit = async (e)=>{
+      setLoading(true)
       e.preventDefault()
       try {
         // ① fetch 実行
@@ -32,18 +39,25 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
         // ③ 400 系ならエラー state にセットして抜ける
         if (!res.ok) {
           setErrors(data)
-          console.log(data)
+          toast.error("エラーが発生しました。")
+          setLoading(false)
+          // console.log(data)
           return
         }
 
         // ④ 成功時の処理
-        console.log('Registration successful:', data)
+        // console.log('Registration successful:', data)
+        toast.success("ログインに成功しました!")
+        setLoading(false)
+        refreshTeams()
         
         onLoginSuccess&&onLoginSuccess()
     } catch (err) {
       // ネットワークエラー等
-      console.error('Network or unexpected error:', err)
+      // console.error('Network or unexpected error:', err)
       setErrors({non_field_errors: ["通信エラーが発生しました。再度お試しください。"]})
+      toast.error("通信エラーが発生しました。")
+      setLoading(false)
     }
     }
 
@@ -78,7 +92,8 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
                 <div key={i}>{msg}</div>
               ))}
           </div>)}
-          <input type="text" className='form-control mb-3' name='username' value={credentials.username} onChange={handleChange} required />
+          <input type="text" className='form-control mb-3' name='username' value={credentials.username} onChange={handleChange} required autoComplete="username" pattern="[!-~]+"
+          title="半角英数字・記号（!～~）のみで入力してください。"/>
         
         <br />
         <label   htmlFor="password" className="form-label">パスワード</label>
@@ -96,11 +111,15 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
         title="パスワードは8文字以上で、大文字と数字を含めてください"  //フォールドにホバー時表示
         onInvalid={e => e.target.setCustomValidity("8文字以上で、大文字と数字を含む必要があります")}  //エラー時表示文字
         onInput={e => e.target.setCustomValidity("")}  //クリア文字
+        autoComplete="current-password"
         />
         
         <br />
         <div className="d-flex justify-content-center gap-3 mt-3">
-          <button id="startBtn"  type='submit' className="btn btn-info btn-lg"><i className="bi bi-door-open"></i></button>
+          {isLoading?<Skeleton/>:(
+            <button id="startBtn"  type='submit' className="btn btn-info btn-lg"><i className="bi bi-door-open"></i></button>
+          )}
+          
         </div>
         {/* {message&&<p>{message}</p>} */}
       </form>

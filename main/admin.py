@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
-from .models import User, Subject, Task, Record, Language
+from .models import User, Subject, Task, Record, Language,Team
 from .forms import CustomUserCreationForm, CustomUserChangeForm
 
 # ── User 以外のモデルは標準登録 ─────────────────────────
@@ -10,6 +10,7 @@ admin.site.register(Subject)
 admin.site.register(Task)
 admin.site.register(Record)
 admin.site.register(Language)
+admin.site.register(Team)
 
 # ── User 用の Admin をカスタマイズ ────────────────────────
 @admin.register(User)

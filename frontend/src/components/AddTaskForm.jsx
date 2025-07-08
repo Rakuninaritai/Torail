@@ -1,9 +1,16 @@
 import React, {  useState } from 'react'
 import { api } from "../api";
+import { useTeam } from '../context/TeamContext';
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
+import { toast } from 'react-toastify';
 
 const AddTaskForm = ({token,changes,sub,subname}) => {
+  const [isLoading, setLoading] = useState(false);
   // Vite のケース
   const API_BASE = import.meta.env.VITE_API_BASE_URL
+  // 今選ばれてるteamのidornull(個人)
+  const { currentTeamId } = useTeam();
   // エラー表示などのmessagestate
   const [errors,setErrors]=useState("")
   const [formData,setFormData]=useState({
@@ -31,19 +38,31 @@ const AddTaskForm = ({token,changes,sub,subname}) => {
   // },[])
   // 送信ボタン押されたら
   const handleSubmit=async (e)=>{
+    setLoading(true)
     // ページがreloadして送信をデフォルトではしようとするがそれをキャンセルしている
     e.preventDefault();
+    const sendData={
+      ...formData,
+      team:currentTeamId
+    }
     // postで送る
     try{
-        const data=await api('/tasks/',{
+        // 個人 or チーム API エンドポイントを切替
+        const path = currentTeamId
+          ? `/tasks/?team=${currentTeamId}`
+          : '/tasks/';
+        const data=await api(path,{
           method: 'POST',
-          body:JSON.stringify(formData),
+          body:JSON.stringify(sendData),
         })
-        console.log("課題が追加されました",data)
+        // console.log("課題が追加されました",data)
+        toast.success("課題が追加されました!")
         changes()
+        setLoading(false)
         }catch(err){
-            console.error(err);
+            // console.error(err);
             setErrors(err)
+            toast.error("課題の追加に失敗しました。")
         }
    
 }
@@ -75,10 +94,14 @@ const AddTaskForm = ({token,changes,sub,subname}) => {
             <div key={i}>{msg}</div>
           ))}
       </div>)}
-      <input type='text' name='name' placeholder='課題'  className='form-control mb-3' value={formData.name} onChange={handleChange}  />
-      <div className="d-flex justify-content-center gap-3 mt-3">
-        {subname?(<button type='submit'  className="btn btn-dark btn-lg" data-bs-dismiss="modal"  >追加</button>):("")}
-      </div>
+      {isLoading?<Skeleton/>:(<>
+        <input type='text' name='name' placeholder='課題'  className='form-control mb-3' value={formData.name} onChange={handleChange}  />
+        <div className="d-flex justify-content-center gap-3 mt-3">
+          {subname?(<button type='submit'  className="btn btn-dark btn-lg" data-bs-dismiss="modal"  >追加</button>):("")}
+        </div>
+        </>
+      )}
+      
     </form>
   )
 }

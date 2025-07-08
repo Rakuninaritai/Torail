@@ -1,8 +1,11 @@
 from rest_framework import viewsets, permissions
 from rest_framework.permissions import IsAuthenticated
 from django.db import models
-from .models import User, Subject, Task, Record, Language,Team, TeamMembership, TeamInvitation
-from .serializers import UserSerializer, SubjectSerializer, TaskSerializer, RecordWriteSerializer,RecordReadSerializer, LanguageSerializer,TeamSerializer, TeamMembershipSerializer,TeamInvitationSerializer
+from django.db.models import Q
+from django.conf import settings
+from django.shortcuts import get_object_or_404
+from .models import User, Subject, Task, Record, Language,Team, TeamMembership, TeamInvitation,Integration
+from .serializers import UserSerializer, SubjectSerializer, TaskSerializer, RecordWriteSerializer,RecordReadSerializer, LanguageSerializer,TeamSerializer, TeamMembershipSerializer,TeamInvitationSerializer#IntegrationSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -10,6 +13,7 @@ from rest_framework.exceptions import PermissionDenied
 from dj_rest_auth.views import LogoutView
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken,TokenError
+from django_filters.rest_framework import DjangoFilterBackend
 # viewsではどのでーたをどうやって取得、保存、更新、削除できるか決める
 
 # Userに対して
@@ -27,9 +31,19 @@ class SubjectViewSet(viewsets.ModelViewSet):
   queryset=Subject.objects.all()
   serializer_class=SubjectSerializer
   permission_classes=[IsAuthenticated]
+  filter_backends = [DjangoFilterBackend]
+  filterset_fields = {
+        'team': ['exact', 'isnull'],  # ← isnull を有効に
+    }
+  
   def get_queryset(self):
-    # 今ログインしているユーザーのデータを取得する
-    return Subject.objects.filter(user=self.request.user)
+    user = self.request.user
+    qs = Subject.objects.filter(user=user)
+    team_id = self.request.query_params.get('team')
+    if team_id:
+        return qs.filter(team__id=team_id)
+    return qs
+  
   # データが作られるとき(POST時)userは今ログインしているユーザー(request.userになる)
   def perform_create(self, serializer):
     serializer.save(user=self.request.user)
@@ -40,8 +54,12 @@ class TaskViewSet(viewsets.ModelViewSet):
   serializer_class=TaskSerializer
   permission_classes=[IsAuthenticated]
   def get_queryset(self):
-    # 今ログインしているユーザーのデータを取得する
-    return Task.objects.filter(user=self.request.user)
+    user = self.request.user
+    qs = Task.objects.filter(user=user)
+    team_id = self.request.query_params.get('team')
+    if team_id:
+        return qs.filter(team__id=team_id)
+    return qs
   # データが作られるとき(POST時)userは今ログインしているユーザー(request.userになる)
   def perform_create(self, serializer):
     serializer.save(user=self.request.user)
@@ -55,22 +73,17 @@ class LanguageViewSet(viewsets.ModelViewSet):
 class IsTeamMember(permissions.BasePermission):
     """
     チーム関連オブジェクト（Team, Record.team!=None）へのアクセス制御
+    チームの人でないとはいらせない
     - チームのオーナー or membership に含まれるユーザーのみ許可
     """
     def has_object_permission(self, request, view, obj):
         # チームオブジェクトなら owner or membership に含まれるか
         if isinstance(obj, Team):
-            return (
-                obj.owner == request.user or
-                obj.memberships.filter(user=request.user).exists()
-            )
+            return  obj.memberships.filter(user=request.user).exists()
         # レコードオブジェクトで team が設定済みなら同様にチェック
         if isinstance(obj, Record) and obj.team:
             team = obj.team
-            return (
-                team.owner == request.user or
-                team.memberships.filter(user=request.user).exists()
-            )
+            return team.memberships.filter(user=request.user).exists()
         # 個人レコード（team=None）は IsAuthenticated で OK
         return True
 
@@ -85,14 +98,39 @@ class TeamViewSet(viewsets.ModelViewSet):
     serializer_class = TeamSerializer
     permission_classes = [IsAuthenticated, IsTeamMember]
 
+    # get時そのユーザーがメンバーかメンバーのチームを返却
     def get_queryset(self):
-        return Team.objects.filter(
-            models.Q(owner=self.request.user) |
-            models.Q(memberships__user=self.request.user)
-        ).distinct()
+        # owner かどうかに関係なく，自分が members に入っているチームを返す
+        return Team.objects.filter(memberships__user=self.request.user).distinct()
 
+    # post時そのユーザーがオーナーでチーム作成
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+        team = serializer.save(owner=self.request.user)  # owner は単に作成者記録
+        # 作成者を membership にも自動で追加しておくと便利
+        TeamMembership.objects.create(team=team, user=self.request.user)
+        
+    # 自分をチームから脱退
+    @action(detail=True, methods=['post'], url_path='leave')
+    def leave(self, request, pk=None):
+        """
+        自分をチームから脱退させる
+        POST /api/teams/{team_id}/leave/
+        """
+        team = self.get_object()
+
+        # オーナーは脱退させない
+        if team.owner == request.user:
+            raise PermissionDenied("チームオーナーは脱退できません。")
+
+        # 自分のメンバーシップを取得して削除
+        membership = get_object_or_404(
+            TeamMembership,
+            team=team,
+            user=request.user
+        )
+        membership.delete()
+
+        return Response({'status': 'left'}, status=204)
 
 # Record
 class RecordViewSet(viewsets.ModelViewSet):
@@ -108,7 +146,7 @@ class RecordViewSet(viewsets.ModelViewSet):
     team_id = self.request.query_params.get('team')
     if team_id:
         return qs.filter(team__id=team_id)
-    return qs.filter(team__isnull=True)
+    return qs
   
   # actionの種類によって使うシリアライザを分ける(読取書き込み)
   def get_serializer_class(self):
@@ -219,11 +257,29 @@ class TeamInvitationViewSet(viewsets.ModelViewSet):
     queryset = TeamInvitation.objects.all()
     serializer_class = TeamInvitationSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['team', 'accepted']
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = super().get_queryset()
+        # デフォルトでは、自分が送った or 自分が受け取ったものだけ
+        qs = qs.filter(Q(invited_by=user) | Q(invited_user=user))
+
+        # クエリパラメータに team があったら、そのチーム全体の招待一覧に切り替え
+        team_id = self.request.query_params.get('team')
+        if team_id:
+            team = get_object_or_404(Team, pk=team_id)
+            # チームのメンバーだけが見られるようにチェック
+            if not team.memberships.filter(user=user).exists():
+                raise PermissionDenied("このチームの招待一覧を参照する権限がありません")
+            qs = TeamInvitation.objects.filter(team=team)  # チーム全体
+        return qs
 
     def perform_create(self, serializer):
         team = serializer.validated_data['team']
-        if team.owner != self.request.user:
-            raise PermissionDenied("招待はオーナーのみ可能です")
+        if not team.memberships.filter(user=self.request.user).exists():
+            raise PermissionDenied("チームメンバーのみ招待を送信できます")
         serializer.save(invited_by=self.request.user)
 
     @action(detail=True, methods=['post'])
@@ -238,5 +294,42 @@ class TeamInvitationViewSet(viewsets.ModelViewSet):
         TeamMembership.objects.create(team=inv.team, user=request.user)
         return Response({'status': 'joined'})
 
+# # backend/main/views.py など
+# def build_discord_oauth_url(team_id: str) -> str:
+#     from urllib.parse import urlencode
 
-#   モデル図シリアらーざviewurls理解
+#     params = {
+#         "client_id": settings.DISCORD_CLIENT_ID,
+#         "scope": "bot identify",
+#         "permissions": settings.DISCORD_PERMS,        # 例: 2048
+#         "response_type": "code",                     # ★ 必須
+#         "redirect_uri": settings.DISCORD_REDIRECT_URI,  # 例: http://localhost:8000/api/integrations/discord/callback/
+#         "state": team_id,                            # ← チーム UUID
+#     }
+#     return "https://discord.com/api/oauth2/authorize?" + urlencode(params, safe=":/")
+  
+# class IntegrationViewSet(viewsets.ModelViewSet):
+#     """
+#     /api/integrations/
+#       - GET: 自分がメンバーのチームの連携一覧
+#       - POST: チームメンバーが連携レコードを作成
+#     """
+#     serializer_class = IntegrationSerializer
+#     permission_classes = [IsAuthenticated, IsTeamMember]
+#     filter_backends = [DjangoFilterBackend]
+#     filterset_fields = ["team", "provider"]
+
+#     def get_queryset(self):
+#         user = self.request.user
+#         qs = Integration.objects.filter(team__memberships__user=user)
+#         team_id = self.request.query_params.get("team")
+#         if team_id:
+#             qs = qs.filter(team__id=team_id)
+#         return qs
+
+#     def perform_create(self, serializer):
+#         team = serializer.validated_data["team"]
+#         # チームメンバー以外は作成禁止
+#         if not team.memberships.filter(user=self.request.user).exists():
+#             raise PermissionDenied("チームメンバーのみ連携を作成できます")
+#         serializer.save()

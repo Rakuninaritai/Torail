@@ -13,6 +13,7 @@ import dj_database_url
 import os
 from pathlib import Path
 from datetime import timedelta
+from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 load_dotenv()   # ← これがあれば .env を読む（なければ追加）
 
@@ -25,7 +26,8 @@ DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-2d6j*fw3jfplti#=dhw^wf7h68j92ot5m2zin2%pda4m(!7u&_"
+# SECRET_KEY = "django-insecure-2d6j*fw3jfplti#=dhw^wf7h68j92ot5m2zin2%pda4m(!7u&_"
+SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
@@ -47,6 +49,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    'django_filters',
     'rest_framework',  # Django REST Framework（API用）
     'rest_framework.authtoken',#ログイン後はトークンを持たせるがそのとき用
     'rest_framework_simplejwt.token_blacklist',#tokenブラックリスト
@@ -236,3 +239,34 @@ else:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SAMESITE  = 'Lax'   # 同一サイト外からのフォーム送信にも対応
     SESSION_COOKIE_SAMESITE = 'Lax'
+
+FERNET_KEY = os.environ["FERNET_KEY"]
+# # ----- Discord OAuth -----
+# DISCORD_CLIENT_ID        = os.getenv("DISCORD_CLIENT_ID")
+# DISCORD_CLIENT_SECRET    = os.getenv("DISCORD_CLIENT_SECRET")
+# DISCORD_REDIRECT_URI     = os.getenv("DISCORD_REDIRECT_URI")
+# DISCORD_PERMS            = os.getenv("DISCORD_PERMS")
+# DISCORD_BOT_TOKEN=os.getenv("DISCORD_BOT_TOKEN")
+
+# ----- Slack OAuth -----
+# SLACK_CLIENT_ID          = os.getenv("SLACK_CLIENT_ID")
+# SLACK_CLIENT_SECRET      = os.getenv("SLACK_CLIENT_SECRET")
+# SLACK_REDIRECT_URI       = "https://torail.app/api/integrations/slack/callback/"
+
+# ----- Celery -----
+CELERY_BROKER_URL        = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND    = os.getenv("REDIS_URL", "redis://localhost:6379/1")
+CELERY_ACCEPT_CONTENT    = ["json"]
+CELERY_TASK_SERIALIZER   = "json"
+CELERY_RESULT_SERIALIZER = "json"
+
+FRONTEND_URL = os.getenv("FRONTEND_URL")
+
+# ── メール送信設定 ─────────────────────────────
+EMAIL_BACKEND        = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST           = "smtp.gmail.com"      # 例: Gmail
+EMAIL_PORT           = 587
+EMAIL_USE_TLS        = True
+EMAIL_HOST_USER      = os.getenv("EMAIL_HOST_USER")      # .env から
+EMAIL_HOST_PASSWORD  = os.getenv("EMAIL_HOST_PASSWORD")  # .env から
+DEFAULT_FROM_EMAIL   = EMAIL_HOST_USER

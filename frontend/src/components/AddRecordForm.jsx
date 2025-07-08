@@ -2,10 +2,17 @@ import React, { useEffect, useState } from 'react'
 import AddSubjectForm from './AddSubjectForm'
 import AddTaskForm from './AddTaskForm'
 import { api } from '../api'
+import { useTeam } from '../context/TeamContext'
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
+import { toast } from 'react-toastify';
 
 function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,subname}) {
   // Vite のケース
   const API_BASE = import.meta.env.VITE_API_BASE_URL
+  const [isLoading, setLoading] = useState(false);
+  // 今選ばれてるteamのidornull(個人)
+  const { currentTeamId } = useTeam();
   // formdata(送るデータ)のusestate
   const [formData,setFormData]=useState({
     subject:"",
@@ -26,29 +33,39 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
 
   // データ取得(第二が[]につきレンダリング時のみ実行)
   useEffect(  ()=>{
+    setLoading(true)
+    setFormData({ subject: "", task: "" });
+    setFilteredTasks([]);
     const shutoku = async ()=>{
       try{
-        const ss=await api('/subjects/',{
+        const pathsubject = currentTeamId
+        ? `/subjects/?team=${currentTeamId}`
+        : '/subjects/?team__isnull=true';
+        const ss=await api(pathsubject,{
           method: 'GET',
         })
         setSubjects(ss)
-        const st=await api('/tasks/',{
+        const pathtasks = currentTeamId
+        ? `/tasks/?team=${currentTeamId}`
+        : '/tasks/';
+        const st=await api(pathtasks,{
           method: 'GET',
         })
         setTasks(st)
-
+        setLoading(false)
         // const sl=await api('/languages/',{
         //   method: 'GET',
         // })
         // setlanguages(sl)
       }catch (err) {
-        console.error(err);
+        // console.error(err);
         setErrors(err)
+        setLoading(false)
       }
         
     }
     shutoku()
-  },[])
+  },[currentTeamId])
 
   // 値が変わったら更新する
   const handleChange=(e)=>{
@@ -62,17 +79,18 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
       const Ssname=subjects.filter(sub=>sub.id===formData.subject)
       selectSubName(Ssname[0].name)
       // 引っ張ってきたtaskそれぞれのsubjectと今回のsubjectが一致するもののみfilteredに入れる
-      console.log(Ssname)
+      // console.log(Ssname)
       const filtered = tasks.filter(task => task.subject === formData.subject)
       // それらを選択肢とする
       setFilteredTasks(filtered)
     } else {
       setFilteredTasks([])
     }
-  },[formData.subject,tasks])
+  },[formData.subject,tasks,currentTeamId])
 
   // 送信ボタン押されたら
   const handleSubmit=async (e)=>{
+    setLoading(true)
     // ページがreloadして送信をデフォルトではしようとするがそれをキャンセルしている
     e.preventDefault();
     // 現時刻を取得してnow格納
@@ -80,89 +98,99 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
     // 送るデータにformとstart時刻を追加する
     const recordData={
       ...formData,
-      start_time:now
+      start_time:now,
+      team:currentTeamId,
     }
     // postで送る
     try{
-        const data=await api('/records/',{
+        await api('/records/',{
           method: 'POST',
           body:JSON.stringify(recordData),
         })
-        console.log("学習記録が追加されました",data)
+        toast.success("タイマーが開始されました!")
         onRecordAdded();//呼び出してる、Appの更新状態用stateを反転させる関数を(appで反転するとリスと再読み込みさせてる)
+        // エラー扱いになるが保存できている事象あり対応して(計測に戻ってしまうがhomeでは対応できる)
+        setLoading(false)
     }catch(err){
       console.error(err);
       setErrors(err)
+      toast.error("タイマーの開始に失敗しました。")
+      setLoading(false)
     }
   }
   return (
     <div className="timer-card mx-auto">
-      <form onSubmit={handleSubmit}>
-        {/* 送信エラー */}
-        {errors.detail && (
-          <div className="text-danger mt-1">
-            <div>{errors.detail}</div>
-          </div>
-        )}
-        {/* ── フォーム全体エラー(non_field_errors) ── */}
-        {errors.non_field_errors && (
-          <div className="alert alert-danger">
-            {errors.non_field_errors.map((msg, i) => (
-              <div key={i}>{msg}</div>
-            ))}
-          </div>)}
-        <label htmlFor="subject" className="form-label">教科</label>
-        {errors.subject && (
-            <div className="text-danger mt-1">
-              {errors.subject.map((msg, i) => (
-                <div key={i}>{msg}</div>
+      {isLoading?<Skeleton/>:(
+        <>
+          <form onSubmit={handleSubmit}>
+            {/* 送信エラー */}
+            {errors.detail && (
+              <div className="text-danger mt-1">
+                <div>{errors.detail}</div>
+              </div>
+            )}
+            {/* ── フォーム全体エラー(non_field_errors) ── */}
+            {errors.non_field_errors && (
+              <div className="alert alert-danger">
+                {errors.non_field_errors.map((msg, i) => (
+                  <div key={i}>{msg}</div>
+                ))}
+              </div>)}
+            <label htmlFor="subject" className="form-label">教科</label>
+            {errors.subject && (
+                <div className="text-danger mt-1">
+                  {errors.subject.map((msg, i) => (
+                    <div key={i}>{msg}</div>
+                  ))}
+                </div>
+              )}
+            <select className='form-control mb-3' name='subject' value={formData.subject} onChange={handleChange} required>
+              <option value="">選択してください</option>
+              {/* usestateのsubjectsをmap関数で1つをsubとして回す */}
+              {subjects.map((sub)=>(
+                <option key={sub.id} value={sub.id}>{sub.name}</option>
               ))}
-            </div>
-          )}
-        <select className='form-control mb-3' name='subject' value={formData.subject} onChange={handleChange} required>
-          <option value="">選択してください</option>
-          {/* usestateのsubjectsをmap関数で1つをsubとして回す */}
-          {subjects.map((sub)=>(
-            <option key={sub.id} value={sub.id}>{sub.name}</option>
-          ))}
-        </select>
-         {/* モーダルを開くボタン */}
-         <button
-          type="button"
-          className="btn btn-outline-secondary me-2"
-          data-bs-toggle="modal"
-          data-bs-target="#addSubjectModal"
-        >
-          新しい教科を追加
-        </button>
-        <hr />
-        <label htmlFor="task" className="form-label">課題</label>
-        {errors.task && (
-            <div className="text-danger mt-1">
-              {errors.task.map((msg, i) => (
-                <div key={i}>{msg}</div>
+            </select>
+            {/* モーダルを開くボタン */}
+            <button
+              type="button"
+              className="btn btn-outline-secondary me-2"
+              data-bs-toggle="modal"
+              data-bs-target="#addSubjectModal"
+            >
+              新しい教科を追加
+            </button>
+            <hr />
+            <label htmlFor="task" className="form-label">課題</label>
+            {errors.task && (
+                <div className="text-danger mt-1">
+                  {errors.task.map((msg, i) => (
+                    <div key={i}>{msg}</div>
+                  ))}
+                </div>
+              )}
+            <select  className='form-control mb-3' name='task' value={formData.task} onChange={handleChange} required>
+              <option value="">選択してください</option>
+              {filteredTasks.map((task)=>(
+                <option key={task.id} value={task.id}>{task.name}</option>
               ))}
+            </select>
+            {/* モーダルを開くボタン */}
+            <button
+              type="button"
+              className="btn btn-outline-secondary me-2"
+              data-bs-toggle="modal"
+              data-bs-target="#addTaskModal"
+            >
+              新しい課題を追加
+            </button>
+            <div className="d-flex justify-content-center gap-3 mt-3">
+              <button id="startBtn"  type='submit' className="btn btn-primary btn-lg"><i className="bi bi-play-fill"></i></button>
             </div>
-          )}
-        <select  className='form-control mb-3' name='task' value={formData.task} onChange={handleChange} required>
-          <option value="">選択してください</option>
-          {filteredTasks.map((task)=>(
-            <option key={task.id} value={task.id}>{task.name}</option>
-          ))}
-        </select>
-        {/* モーダルを開くボタン */}
-        <button
-          type="button"
-          className="btn btn-outline-secondary me-2"
-          data-bs-toggle="modal"
-          data-bs-target="#addTaskModal"
-        >
-          新しい課題を追加
-        </button>
-        <div className="d-flex justify-content-center gap-3 mt-3">
-          <button id="startBtn"  type='submit' className="btn btn-primary btn-lg"><i className="bi bi-play-fill"></i></button>
-        </div>
-      </form>
+          </form>
+        </>
+      )}
+      
 
       {/* モーダル本体 */}
       <div

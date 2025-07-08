@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import DeleteTimer from './DeleteTimer'
 import { api } from "../api";
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
+import { toast } from 'react-toastify';
 
-const RecordDetail = ({cf,rec,token}) => {
+const RecordDetail = ({cf,rec,token,teams}) => {
+  const [isLoading, setLoading] = useState(false);
   // エラー表示などのmessagestate
   const [errors,setErrors]=useState("")
   // Vite のケース
@@ -16,26 +20,49 @@ const RecordDetail = ({cf,rec,token}) => {
     subject:    rec.subject.id,
     task:       rec.task.id,
     language:   rec.language.id,
-    duration:      rec.duration/1000/60,
+    duration:      Math.round(rec.duration/1000/60),
     // ↑分にしてる
     date:       rec.date,
     description:       rec.description,
+    user:rec.user.username,
+    team:rec.team
   })
   // 値が変わったら更新する
   const handleChange=(e)=>{
     setFormData({...formData,[e.target.name]:e.target.value})
   }
+  const handleTeamChange = e => {
+    const nextTeam = e.target.value || null  // "" にして「個人」扱い
+    // ★ まずそのチーム(or 個人)に属する科目を抽出
+  const nextSubjects = subjects.filter((s) =>
+    nextTeam == null ? s.team == null : s.team == nextTeam
+  );
 
+  // ★ 先頭科目 ID を決める（無ければ ""）
+  const firstSubId = nextSubjects[0]?.id ?? "";
+  const firstTasId= tasks.find(task => task.subject == firstSubId).id
+    setFormData({
+      ...formData,
+      team:    nextTeam,
+      subject: firstSubId, 
+      task:    firstTasId,    
+    })
+  }
+
+  // 個人の統計だと個人のもの全部見える(チーム問わず)
+  // チームの統計だとチームの全部見える(編集はそのユーザーだけ)()
 
   // 選択肢のある奴のusestate
   const [subjects,setSubjects]=useState([])
   const [tasks,setTasks]=useState([])
   const [languages,setLanguages]=useState([])
+  const [filteredSubjects,setFilteredSubjects]=useState([])
   // 教科
   const [filteredTasks,setFilteredTasks]=useState([])
   // データ取得(第二が[]につきレンダリング時のみ実行)
   useEffect(()=>{
     const shutoku = async ()=>{
+          setLoading(true)
           try{
             const ss=await api('/subjects/',{
               method: 'GET',
@@ -45,35 +72,59 @@ const RecordDetail = ({cf,rec,token}) => {
               method: 'GET',
             })
             setTasks(st)
-    
+            // console.log(ss)
+            // console.log(st)
+            // taskが一つ以上あるsubjectのみに変更
+            const subjectsWithTasks = ss.filter(subject =>
+              // 各subjectで1以上あればtrue返す
+              st.some(task => task.subject === subject.id)
+            );
+            setSubjects(subjectsWithTasks)
             const sl=await api('/languages/',{
               method: 'GET',
             })
             setLanguages(sl)
+            setLoading(false)
           }catch (err) {
-            console.error(err);
+            // console.error(err);
+            setLoading(false)
             setErrors(err)
           }
             
         }
         shutoku()
-    
   },[])
+  useEffect(()=>{
+    // チーム選択がない (個人モード) なら team=null の科目だけ
+    if (!formData.team) {
+      setFilteredSubjects(subjects.filter(sub => sub.team == null));
+    } else {
+      // チームモード ならチームのだけ
+      setFilteredSubjects(
+        subjects.filter(sub => {
+          const tid =sub.team 
+          return tid == formData.team;
+        })
+      );
+    }
+  },[formData.team,subjects])
   // formdataのsubjectが変わったら課題を更新する
   useEffect(()=>{
     // 教科に値が入っているなら(id)
     if(formData.subject){
-      const filtered = tasks.filter(task => task.subject === formData.subject)
+      const filtered = tasks.filter(task => task.subject == formData.subject)
       // それらを選択肢とする
       setFilteredTasks(filtered)
     } else {
       setFilteredTasks([])
     }
-  },[formData.subject,tasks])
-    
+  },[formData.subject,tasks,formData.team])
+  // figma記載の詳細編集対応して
+  // バリでやって設定いってダッシュへ
 
   // 送信ボタン押されたら
   const handleSubmit=async (e)=>{
+    setLoading(true)
     // ページがreloadして送信をデフォルトではしようとするがそれをキャンセルしている
     e.preventDefault();
     
@@ -88,10 +139,14 @@ const RecordDetail = ({cf,rec,token}) => {
         method: 'PATCH',
         body:JSON.stringify(recordData),
         })
-        console.log("学習記録が追加されました",data)
+        // console.log("学習記録が追加されました",data)
+        toast.success("学習記録が変更されました!")
+        setLoading(false)
         cf(null)
         }catch(err){
-          console.error(err);
+          // console.error(err);
+          toast.error("変更に失敗しました。")
+          setLoading(false)
           setErrors(err)
         }
   }
@@ -127,7 +182,7 @@ const RecordDetail = ({cf,rec,token}) => {
             </div>)}
             <select className='form-control ' name='subject' value={formData.subject} onChange={handleChange} disabled={!isEditing}>
               {/* usestateのsubjectsをmap関数で1つをsubとして回す */}
-              {subjects.map((sub)=>(
+              {filteredSubjects.map((sub)=>(
                 <option key={sub.id} value={sub.id}>{sub.name}</option>
               ))}
             </select>
@@ -208,6 +263,21 @@ const RecordDetail = ({cf,rec,token}) => {
               onChange={handleChange}
             />
           </div>
+          <div className="col-md">
+            <label className="form-label" htmlFor="team">チーム</label>
+            {errors.team && (
+              <div className="text-danger mt-1">
+                {errors.team.map((msg, i) => (
+                  <div key={i}>{msg}</div>
+                ))}
+            </div>)}
+            <select  className='form-control ' name='team' value={formData.team ?? null} onChange={handleTeamChange} disabled={!isEditing}>
+              <option value="">個人</option>
+              {teams.map((team)=>(
+                <option key={team.id} value={team.id}>{team.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* メモ */}
@@ -229,55 +299,85 @@ const RecordDetail = ({cf,rec,token}) => {
             onChange={handleChange}
           />
         </div>
+         {/* ユーザー */}
+        <div className="mb-3">
+          <label className="form-label" htmlFor="user">ユーザー</label>
+          <input
+            id="user"
+            name="user"
+            rows="3"
+            className="form-control"
+            value={formData.user}
+            disabled
+          />
+        </div>
 
         {/* アクションボタン */}
-        <div className="d-flex gap-2 justify-content-end">
-          {!isEditing ? (
-            <>
-            <button
-              type="button"
-              id="editBtn"
-              className="btn btn-outline-primary"
-              onClick={()=>{
-                // マウスのmouseupが終わってから切り替える
-                window.requestAnimationFrame(() => onEdit());
-              }}
-            >
-              <i className="bi bi-pencil" /> 編集
-            </button>
-            <DeleteTimer token={token} record={rec} settimerchange={()=>{cf(null)}}/>
-            <button
-                type="button"
-                id="cancelBtn"
-                className="btn btn-secondary"
-                onClick={()=>cf(null)}
-              >
-                キャンセル
-              </button>
+        {isLoading?<Skeleton/>:(
+          <div className="d-flex gap-2 justify-content-end">
+            {!isEditing ? (
+              // 記録者が今見てるユーザーか
+              (token.pk==rec.user.id?(
+                <>
+                <button
+                  type="button"
+                  id="editBtn"
+                  className="btn btn-outline-primary"
+                  onClick={()=>{
+                    // マウスのmouseupが終わってから切り替える
+                    window.requestAnimationFrame(() => onEdit());
+                  }}
+                >
+                  <i className="bi bi-pencil" /> 編集
+                </button>
+                <DeleteTimer token={token} record={rec} settimerchange={()=>{cf(null)}}/>
+                <button
+                    type="button"
+                    id="cancelBtn"
+                    className="btn btn-secondary"
+                    onClick={()=>cf(null)}
+                  >
+                    キャンセル
+                  </button>
+                </>
+              ):(
+                <>
+                  <button
+                  type="button"
+                  id="cancelBtn"
+                  className="btn btn-secondary"
+                  onClick={()=>cf(null)}
+                >
+                  キャンセル
+                </button>
+                </>
+              ))
+              
+            ) : (
+              <>
+                <button
+                  type="submit"
+                  // type="button"
+                  id="saveBtn"
+                  className="btn btn-success"
+                  // onClick={handleSubmit}
+                >
+                  <i className="bi bi-save" /> 保存
+                </button>
+                <DeleteTimer token={token} record={rec} settimerchange={()=>{cf(null)}}/>
+                <button
+                  type="button"
+                  id="cancelBtn"
+                  className="btn btn-secondary"
+                  onClick={()=>cf(null)}
+                >
+                  キャンセル
+                </button>
               </>
-          ) : (
-            <>
-              <button
-                type="submit"
-                // type="button"
-                id="saveBtn"
-                className="btn btn-success"
-                // onClick={handleSubmit}
-              >
-                <i className="bi bi-save" /> 保存
-              </button>
-              <DeleteTimer token={token} record={rec} settimerchange={()=>{cf(null)}}/>
-              <button
-                type="button"
-                id="cancelBtn"
-                className="btn btn-secondary"
-                onClick={()=>cf(null)}
-              >
-                キャンセル
-              </button>
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        )}
+        
       </form>
     </div>
   </div>

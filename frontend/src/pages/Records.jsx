@@ -2,6 +2,7 @@ import React from 'react'
 import RecordsList from '../components/RecordsList'
 
 const Records = ({token,koushin }) => {
+  document.title="Torail|統計"
   return (
     <div>
       <h1><i className="bi bi-bar-chart"></i> 統計</h1>

@@ -1,45 +1,61 @@
-version: "3.9"
+version: "3"                     # version 行は 3 でも省略でも OK
 services:
+  # ---------- PostgreSQL ----------
   db:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: torail
       POSTGRES_USER: torail
       POSTGRES_PASSWORD: torail_pass
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    ports: [ "5432:5432" ]
+    volumes: [ postgres_data:/var/lib/postgresql/data ]
 
+  # ---------- Redis ----------
+  redis:
+    image: redis:7-alpine
+    ports: [ "6379:6379" ]
+
+  # ---------- Django ----------
   backend:
     build:
-      context: .                # ← ルートをビルドコンテキストに
-      dockerfile: Dockerfile.backend  # ← ファイル名をそのまま指定
-    env_file: .env              # 必要なら.envを置く
+      context: .                 # ルートの Dockerfile を使う
+      dockerfile: Dockerfile.backend
+    env_file: .env
     volumes:
-      - .:/app                   # ホストのルートを/appにマウント
-    ports:
-      - "8000:8000"
+      - .:/app                   # ソースをマウント
     command: >
-      sh -c "python manage.py migrate &&
-             gunicorn Torail.wsgi:application --bind 0.0.0.0:${PORT:-8000}"
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+    ports: [ "8000:8000" ]
+    depends_on: [ db, redis ]
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
 
+  # ---------- Celery Worker ----------
+  worker:
+    build:
+      context: .                 # backend と同じイメージ
+      dockerfile: Dockerfile.backend
+    command: celery -A Torail worker --loglevel=info
+    env_file: .env
+    volumes:
+      - .:/app
+    depends_on: [ redis ]
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
 
+  # ---------- React (開発用) ----------
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    depends_on:
-      - backend
-    # ホストのコードはマウントするが、node_modules はコンテナ側を優先
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    ports:
-      - "5173:5173"
+    ports: [ "5173:5173" ]
+    depends_on: [ backend ]
 
 volumes:
   postgres_data:
-
-# docker compose up --build -d
-# docker compose down
