@@ -191,6 +191,10 @@ REST_FRAMEWORK = {
        # ブラウザでのデバッグ用に SessionAuthentication を残す場合 
     #    'rest_framework.authentication.SessionAuthentication', 
    ),
+    'DEFAULT_RENDERER_CLASSES': (
+        # html(GUI)からエンドポイント触れない
+        'rest_framework.renderers.JSONRenderer',
+    ),
 }
 
 REST_USE_JWT = True

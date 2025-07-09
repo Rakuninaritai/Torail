@@ -1,22 +1,51 @@
+# FROM python:3.12-slim
+
+# ENV PYTHONDONTWRITEBYTECODE=1 \
+#     PYTHONUNBUFFERED=1 \
+#     PIP_NO_CACHE_DIR=1
+
+# WORKDIR /app
+
+# COPY requirements.txt .
+# RUN pip install -r requirements.txt
+
+# COPY . .
+
+# RUN mkdir -p /app/staticfiles
+# ENV STATIC_ROOT=/app/staticfiles
+# RUN python manage.py collectstatic --noinput
+
+
+
+# # Railway が自動で渡す PORT を尊重
+# CMD ["sh", "-c", "python manage.py migrate && gunicorn Torail.wsgi:application --bind 0.0.0.0:${PORT:-8000}"]
+
 FROM python:3.12-slim
 
+# 環境変数設定
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    STATIC_ROOT=/app/staticfiles
 
 WORKDIR /app
 
+# 1) 依存インストール
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 2) エントリポイント＆ソースをコピー
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 COPY . .
 
-RUN mkdir -p /app/staticfiles
-ENV STATIC_ROOT=/app/staticfiles
-RUN python manage.py collectstatic --noinput
+# 3) ビルド時に staticfiles ディレクトリを作成
+RUN mkdir -p "${STATIC_ROOT}"
 
+# 4) エントリポイントを設定
+ENTRYPOINT ["sh", "/app/entrypoint.sh"]
 
-
-# Railway が自動で渡す PORT を尊重
-CMD ["sh", "-c", "python manage.py migrate && gunicorn Torail.wsgi:application --bind 0.0.0.0:${PORT:-8000}"]
-
+# 5) デフォルトの起動コマンド。
+#    Railway ではここを実行 (migrate/collectstatic → gunicorn)
+CMD ["gunicorn", "Torail.wsgi:application", "--bind", "0.0.0.0:${PORT:-8000}"]
