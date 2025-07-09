@@ -38,6 +38,11 @@ const AddSubjectForm = ({token,changes}) => {
           body:JSON.stringify(sendData),
         })
         // console.log("教科が追加されました",data)
+        // 例: AddSubjectForm の handleSubmit 内、成功時に…
+        const modalEl = document.getElementById('addSubjectModal'); // モーダルの <div id="addSubjectModal"> を指す
+        // 既にインスタンスがあれば取得、なければ生成
+        const bsModal = window.bootstrap.Modal.getInstance(modalEl) || new window.bootstrap.Modal(modalEl);
+        bsModal.hide();
         toast.success("教科が追加されました!")
         changes()
         setLoading(false)

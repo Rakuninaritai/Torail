@@ -4,7 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 import { toast } from 'react-toastify';
+import { useTeam } from '../context/TeamContext'
 const LogoutBtn = ({onLogoutSuccess}) => {
+  const { selectTeam } = useTeam()
   const [isLoading, setLoading] = useState(false);
   const navigate=useNavigate()
   const handleLogout = async () => {
@@ -17,6 +19,7 @@ const LogoutBtn = ({onLogoutSuccess}) => {
       // console.log("ログアウト完了",data)
       toast.success("ログアウトが完了しました!")
       setLoading(false)
+      selectTeam(null)
       // チームを呼び出すことで空に
       navigate("/")
       onLogoutSuccess()

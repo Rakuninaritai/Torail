@@ -96,7 +96,7 @@ const Settings_Subject_Task = () => {
                 name: '',
               });
           }
-          console.log(filtered)}else{
+         }else{
             setInitialSubject("");
           }
         } else {

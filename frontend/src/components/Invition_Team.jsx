@@ -32,7 +32,7 @@ const Invition_Team = ({set}) => {
                 const tm=await api(`/teams/${currentTeamId}/`,{
                   method: 'GET',
                 })
-                console.log(tm)
+                // console.log(tm)
                 const im=await api(`/invitations/?team=${currentTeamId}&accepted=false`,{
                   method: 'GET',
                 })

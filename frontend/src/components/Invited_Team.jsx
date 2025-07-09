@@ -8,7 +8,7 @@ import 'react-loading-skeleton/dist/skeleton.css';
 import { toast } from 'react-toastify';
 
 const Invited_Team = ({set}) => {
-  const { currentTeamId } = useTeam();
+  const { currentTeamId,refreshTeams} = useTeam();
   const [isLoading, setLoading] = useState(false);
   // ユーザー一覧
   const [initialData, setinitialData] = useState([]);
@@ -69,6 +69,7 @@ const Invited_Team = ({set}) => {
           })
           // console.log("承認が送られました",data)
           toast.success("承認が送られました!")
+          refreshTeams()
           setLoading(false)
           set()
           }catch(err){

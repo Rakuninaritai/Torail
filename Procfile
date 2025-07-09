@@ -1,3 +1,2 @@
-
-web:    gunicorn Torail.wsgi:application --bind 0.0.0.0:$PORT --workers 3
-worker: celery -A Torail worker --loglevel=info
+web:    python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn Torail.wsgi:application --bind 0.0.0.0:8000 --workers 3
+worker: celery -A Torail worker --loglevel=info --concurrency=4

@@ -12,7 +12,7 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
   const [credentials,setCredentials]=useState({username:"",password:""})
   // エラー表示などのmessagestate
   const [errors,setErrors]=useState("")
-  const { refreshTeams } = useTeam()
+  const { refreshTeams,selectTeam } = useTeam()
 
   // input変わるとデータ取得
   const handleChange=(e)=>{
@@ -50,6 +50,7 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
         toast.success("ログインに成功しました!")
         setLoading(false)
         refreshTeams()
+        selectTeam(null)
         
         onLoginSuccess&&onLoginSuccess()
     } catch (err) {

@@ -1,12 +1,5 @@
-#!/bin/sh
+#!/usr/bin/env sh
 set -e
 
-echo ">>> [entrypoint] Running migrations…"
-python manage.py migrate --noinput
-
-echo ">>> [entrypoint] Collecting static files…"
-python manage.py collectstatic --noinput
-
-# "$@" に CMD で指定したコマンドが入る（gunicorn など）
-echo ">>> [entrypoint] Starting main process: $@"
-exec "$@"
+# Honcho が Procfile を読んで web と worker を並列起動します
+exec honcho start -f /app/Procfile

@@ -9,7 +9,7 @@ import { toast } from 'react-toastify';
 
 const Settings_Team = () => {
   const [isLoading, setLoading] = useState(false);
-  const { currentTeamId, refreshTeams } = useTeam();
+  const { currentTeamId, refreshTeams,selectTeam} = useTeam();
   const navigate = useNavigate(); 
   const [formData, setFormData] = useState({ name: '', });
   // 引っ張ってきたデータ(こいつがformdataと一緒なら送らない)
@@ -58,6 +58,7 @@ const Settings_Team = () => {
             })
             // console.log("削除が完了しました。",data)
             toast.success("削除が完了しました!")
+            selectTeam(null)
             setLoading(false)
             // replacetrueで履歴付けずにリダイレクト
             refreshTeams()

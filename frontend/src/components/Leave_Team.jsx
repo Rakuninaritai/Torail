@@ -10,7 +10,7 @@ import { toast } from 'react-toastify';
 const Leave_Team = () => {
   const [isLoading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { currentTeamId ,refreshTeams} = useTeam();
+  const { currentTeamId ,refreshTeams,selectTeam} = useTeam();
   
   // ユーザー一覧
   const [initialData, setinitialData] = useState([]);
@@ -56,6 +56,7 @@ const Leave_Team = () => {
           })
           // console.log("脱退できました",data)
           toast.success("チーム脱退に成功しました!")
+          selectTeam(null)
           refreshTeams()
           navigate('/');
           setLoading(false)
@@ -80,6 +81,7 @@ const Leave_Team = () => {
           })
           // console.log("チームが削除がされました",data)
           toast.success("チームの削除に成功しました!")
+          selectTeam(null)
           setLoading(false)
           refreshTeams()
           navigate('/');

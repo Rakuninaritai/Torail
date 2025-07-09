@@ -26,49 +26,50 @@ class UserViewSet(viewsets.ModelViewSet):
   # 認証(ユーザーがログイン)していないと使えないように
   permission_classes=[IsAuthenticated]
 
-# Subject
-class SubjectViewSet(viewsets.ModelViewSet):
-  queryset=Subject.objects.all()
-  serializer_class=SubjectSerializer
-  permission_classes=[IsAuthenticated]
-  filter_backends = [DjangoFilterBackend]
-  filterset_fields = {
-        'team': ['exact', 'isnull'],  # ← isnull を有効に
-    }
-  
-  def get_queryset(self):
-    user = self.request.user
-    qs = Subject.objects.filter(user=user)
-    team_id = self.request.query_params.get('team')
-    if team_id:
-        return qs.filter(team__id=team_id)
-    return qs
-  
-  # データが作られるとき(POST時)userは今ログインしているユーザー(request.userになる)
-  def perform_create(self, serializer):
-    serializer.save(user=self.request.user)
+class BaseSharedViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    # ここでは filter_backends / filterset_fields は指定しない
 
-# Task
-class TaskViewSet(viewsets.ModelViewSet):
-  queryset=Task.objects.all()
-  serializer_class=TaskSerializer
-  permission_classes=[IsAuthenticated]
-  def get_queryset(self):
-    user = self.request.user
-    qs = Task.objects.filter(user=user)
-    team_id = self.request.query_params.get('team')
-    if team_id:
-        return qs.filter(team__id=team_id)
-    return qs
-  # データが作られるとき(POST時)userは今ログインしているユーザー(request.userになる)
-  def perform_create(self, serializer):
-    serializer.save(user=self.request.user)
+    def get_shared_queryset(self, model_cls):
+        user       = self.request.user
+        team_param = self.request.query_params.get('team')
 
-# Language
-class LanguageViewSet(viewsets.ModelViewSet):
-  queryset = Language.objects.all()
-  serializer_class = LanguageSerializer
-  permission_classes = [IsAuthenticated]
+        # 2) team=all
+        if team_param == 'all':
+            return model_cls.objects.filter(
+                Q(user=user, team__isnull=True) |
+                Q(team__memberships__user=user)
+            ).distinct()
+            
+        # 1) team=<数字>
+        if team_param :
+            team = get_object_or_404(
+                Team,
+                id=team_param,
+                memberships__user=user
+            )
+            return model_cls.objects.filter(team=team)
+
+        
+
+        # 3) team=null ／ パラメータなし
+        return model_cls.objects.filter(user=user, team__isnull=True)
+
+
+class SubjectViewSet(BaseSharedViewSet):
+    serializer_class = SubjectSerializer
+    def get_queryset(self):
+        return self.get_shared_queryset(Subject)
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class TaskViewSet(BaseSharedViewSet):
+    serializer_class = TaskSerializer
+    def get_queryset(self):
+        return self.get_shared_queryset(Task)
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 class IsTeamMember(permissions.BasePermission):
     """
@@ -86,6 +87,98 @@ class IsTeamMember(permissions.BasePermission):
             return team.memberships.filter(user=request.user).exists()
         # 個人レコード（team=None）は IsAuthenticated で OK
         return True
+      
+class RecordViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, IsTeamMember]
+
+    def get_queryset(self):
+        user       = self.request.user
+        team_param = self.request.query_params.get('team')
+
+        # 1) team=<数字> のときは特定チームのレコードのみ
+        if team_param :
+            team = get_object_or_404(
+                Team,
+                id=team_param,
+                memberships__user=user
+            )
+            return Record.objects.filter(team=team)
+
+        # 2) それ以外（パラメータなし／team=null／team=all）はすべて取得
+        return Record.objects.filter(
+            Q(user=user,            team__isnull=True)  | 
+            Q(team__memberships__user=user)
+        ).distinct()
+
+    def get_serializer_class(self):
+        if self.action in ['create','update','partial_update']:
+            return RecordWriteSerializer
+        return RecordReadSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+        
+# Subject
+# class SubjectViewSet(viewsets.ModelViewSet):
+#   queryset=Subject.objects.all()
+#   serializer_class=SubjectSerializer
+#   permission_classes=[IsAuthenticated]
+#   filter_backends = [DjangoFilterBackend]
+#   filterset_fields = {
+#         'team': ['exact', 'isnull'],  # ← isnull を有効に
+#     }
+  
+#   def get_queryset(self):
+#       user    = self.request.user
+#       team_id = self.request.query_params.get('team', None)
+
+#       # ─── チーム指定あり ───
+#       if team_id:
+#           # 「team=null」もしくは空文字が来たら個人レコードだけ
+#           if team_id.lower() in ('null', ''):
+#               return Subject.objects.filter(user=user, team__isnull=True)
+
+#           # それ以外の team=<id> はそのチームの全レコード
+#           team = get_object_or_404(Team, id=team_id, memberships__user=user)
+#           return Subject.objects.filter(team=team)
+
+#       # ─── デフォルト／パラメータなし ───
+#       # 個人レコードだけ返す
+#       return Subject.objects.filter(user=user, team__isnull=True)
+
+#   def perform_create(self, serializer):
+#       serializer.save(user=self.request.user)
+
+# Task
+# class TaskViewSet(viewsets.ModelViewSet):
+#   queryset=Task.objects.all()
+#   serializer_class=TaskSerializer
+#   permission_classes=[IsAuthenticated]
+#   filter_backends    = [DjangoFilterBackend]
+#   filterset_fields   = {'team': ['exact', 'isnull']}
+
+#   def get_queryset(self):
+#       user    = self.request.user
+#       team_id = self.request.query_params.get('team', None)
+
+#       if team_id:
+#           if team_id.lower() in ('null', ''):
+#               return Task.objects.filter(user=user, team__isnull=True)
+#           team = get_object_or_404(Team, id=team_id,memberships__user=user)
+#           return Task.objects.filter(team=team)
+
+#       return Task.objects.filter(user=user, team__isnull=True)
+
+#   def perform_create(self, serializer):
+#       serializer.save(user=self.request.user)
+
+# Language
+class LanguageViewSet(viewsets.ModelViewSet):
+  queryset = Language.objects.all()
+  serializer_class = LanguageSerializer
+  permission_classes = [IsAuthenticated]
+
+
 
 
 class TeamViewSet(viewsets.ModelViewSet):
@@ -133,30 +226,39 @@ class TeamViewSet(viewsets.ModelViewSet):
         return Response({'status': 'left'}, status=204)
 
 # Record
-class RecordViewSet(viewsets.ModelViewSet):
-  # クエリセットはclassが定義された段階で呼ばれる(必要)noneでも
-  # get_quarysetはリクエストがあった段階で呼ばれる
-  queryset=Record.objects.none()
-  # queryset=Record.objects.all()
-  permission_classes=[IsAuthenticated,IsTeamMember]
+# class RecordViewSet(viewsets.ModelViewSet):
+#   # クエリセットはclassが定義された段階で呼ばれる(必要)noneでも
+#   # get_quarysetはリクエストがあった段階で呼ばれる
+#   queryset=Record.objects.none()
+#   # serializer_class = RecordReadSerializer
+#   # queryset=Record.objects.all()
+#   permission_classes=[IsAuthenticated,IsTeamMember]
   
-  def get_queryset(self):
-    user = self.request.user
-    qs = Record.objects.filter(user=user)
-    team_id = self.request.query_params.get('team')
-    if team_id:
-        return qs.filter(team__id=team_id)
-    return qs
-  
-  # actionの種類によって使うシリアライザを分ける(読取書き込み)
-  def get_serializer_class(self):
-    if self.action in ['create','update','partial_update']:
-      return RecordWriteSerializer
-    return RecordReadSerializer
-  
-  # データが作られるとき(POST時)userは今ログインしているユーザー(request.userになる)
-  def perform_create(self, serializer):
-    serializer.save(user=self.request.user)
+#   def get_queryset(self):
+#       user    = self.request.user
+#       team_id = self.request.query_params.get('team', None)
+
+#       # ─── チームID指定あり ───
+#       if team_id and team_id.lower() not in ('null', ''):
+#           # チームのメンバー権限チェック（IsTeamMember でカバーしていなければここでも）
+#           team = get_object_or_404(
+#               Team,
+#               id=team_id,
+#               memberships__user=user
+#           )
+#           return Record.objects.filter(team=team)
+
+#       # ─── デフォルト／team=null／パラメータなし ───
+#       # ログインユーザーの作成した全レコードを返す
+#       return Record.objects.filter(user=user)
+
+#   def get_serializer_class(self):
+#       if self.action in ['create', 'update', 'partial_update']:
+#           return RecordWriteSerializer
+#       return RecordReadSerializer
+
+#   def perform_create(self, serializer):
+#       serializer.save(user=self.request.user)
     
 # ログイン成功時tokenを発行してhttponlycookieにsetするビュー
 class CookieTokenObtainPairView(TokenObtainPairView):

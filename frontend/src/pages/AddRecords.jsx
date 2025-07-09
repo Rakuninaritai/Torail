@@ -28,7 +28,7 @@ const AddRecords= ({token,onRecordAdded,updateFlag}) => {
   // timerの中断等管理用state(これタイコンに渡してるんで値変わるとタイマー再取得のタイマーも再度レンダリング)
   const Timer_State_Change=()=>{
     setTimerChange(!TimerChange)
-    console.log("timerchange!!")
+    // console.log("timerchange!!")
   }
   // 今計測中のレコードを格納用のstate
   const [runningRecord,setRunningRecord]=useState()
@@ -51,14 +51,14 @@ const AddRecords= ({token,onRecordAdded,updateFlag}) => {
             })
             // console.log(ss)
             // 停止でないタイマーがあればallへ
-            const all = aa.filter(record => record.timer_state!=2 );
+            const all = aa.filter(record => record.timer_state!=2 && record.user.id === token.pk);
             const running = all.filter(r => {
-              const isMine = r.user.id === token.pk;
+             ;
               if (currentTeamId) {
-                return isMine && r.team === currentTeamId;
+                return r.team === currentTeamId;
               } else {
                 // r.team が null か undefined のみを許可する
-                return isMine && (r.team === null || r.team === undefined);
+                return (r.team === null || r.team === undefined);
               }
           });
             if(all.length>0&&running.length===0){

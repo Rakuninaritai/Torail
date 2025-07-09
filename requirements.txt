@@ -24,3 +24,4 @@ celery>=5.3
 redis>=5.0
 slack_sdk>=3.27
 cryptography>=42.0
+Honcho>=2.0.0

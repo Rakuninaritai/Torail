@@ -57,6 +57,11 @@ const AddTaskForm = ({token,changes,sub,subname}) => {
         })
         // console.log("課題が追加されました",data)
         toast.success("課題が追加されました!")
+        // 例: AddSubjectForm の handleSubmit 内、成功時に…
+        const modalEl = document.getElementById('addTaskModal'); // モーダルの <div id="addSubjectModal"> を指す
+        // 既にインスタンスがあれば取得、なければ生成
+        const bsModal = window.bootstrap.Modal.getInstance(modalEl) || new window.bootstrap.Modal(modalEl);
+        bsModal.hide();
         changes()
         setLoading(false)
         }catch(err){

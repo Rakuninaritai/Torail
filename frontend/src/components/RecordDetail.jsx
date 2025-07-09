@@ -64,11 +64,11 @@ const RecordDetail = ({cf,rec,token,teams}) => {
     const shutoku = async ()=>{
           setLoading(true)
           try{
-            const ss=await api('/subjects/',{
+            const ss=await api('/subjects/?team=all',{
               method: 'GET',
             })
             setSubjects(ss)
-            const st=await api('/tasks/',{
+            const st=await api('/tasks/?team=all',{
               method: 'GET',
             })
             setTasks(st)

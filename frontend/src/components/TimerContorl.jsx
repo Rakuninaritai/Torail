@@ -20,7 +20,8 @@ const TimerContorl = ({token,records,settimerchange}) => {
   const API_BASE = import.meta.env.VITE_API_BASE_URL
   // タイマの動作のstate
   // 実行中のレコードを取り出し
-  const record=records[0]
+  const record=records.find(rec=>rec.user.id==token.pk)
+  
   // 経過時間取り出し(中断していたらその数字、していないなら0)
   const inialElaapsed=record.duration? record.duration:0
   // console.log(inialElaapsed)
@@ -41,6 +42,7 @@ const TimerContorl = ({token,records,settimerchange}) => {
   const timerIdRef=useRef(null)
   useEffect(()=>{
     setLoading(true)
+    // console.log(token)
     // 実行中の場合
     record.timer_state===0&&(
       setTimerState("実行中"),
