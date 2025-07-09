@@ -85,7 +85,7 @@ const RecordsList = ({token}) => {
             <table className="table mb-0">
               <thead className="table-light"><tr><th>日時</th>{currentTeamId?<th>ユーザー</th>:<th>チーム</th>}<th>科目</th><th>課題</th><th>時間</th><th>詳細・編集・削除</th></tr></thead>
               <tbody id="recordsBody">
-                {isLoading?<tr><td colSpan={6}><Skeleton width="100%"/></td></tr>:(
+                {isLoading?<tr><td colSpan={6}><Skeleton width="100%"/></td></tr>:records.length==0?(<tr><td colSpan={6} className="text-center text-muted py-4">データがありません</td></tr>):(
                   records.map((record)=>(
                     <tr key={record.id}>
                       <td>{record.date}</td>

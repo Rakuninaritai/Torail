@@ -52,7 +52,7 @@ const Home = ({ token }) => {
               <i className="bi bi-stopwatch display-5 mb-3 text-primary"></i>
               <h5 className="card-title fw-semibold">タイムトラッキング</h5>
               <p className="card-text small">
-                ワンクリックで学習時間を計測。履歴やメモも残せます。
+                ワンクリックで作業時間を計測。履歴やメモも残せます。
               </p>
             </div>
           </div>
@@ -64,7 +64,7 @@ const Home = ({ token }) => {
               <i className="bi bi-bar-chart-line display-5 mb-3 text-success"></i>
               <h5 className="card-title fw-semibold">統計ダッシュボード</h5>
               <p className="card-text small">
-                教科別・課題別の学習量をグラフで可視化し、進捗をひと目で確認。
+                教科別・課題別の作業量をグラフで可視化し、進捗をひと目で確認。
               </p>
             </div>
           </div>
@@ -77,7 +77,7 @@ const Home = ({ token }) => {
               <h5 className="card-title fw-semibold">チーム通知</h5>
               <p className="card-text small">
                 メンバーの記録を メール へリアルタイム通知。
-                学習仲間と励まし合えます。
+                仲間と励まし合えます。
               </p>
             </div>
           </div>

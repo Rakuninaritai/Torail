@@ -73,7 +73,7 @@ const AddSubjectForm = ({token,changes}) => {
       {isLoading?(<Skeleton/>):(<>
         <input type='text' name='name' placeholder='教科' className='form-control mb-3' value={formData.name} onChange={handleChange}  />
         <div className="d-flex justify-content-center gap-3 mt-3">
-            <button type='submit'  className="btn btn-dark btn-lg" data-bs-dismiss="modal"  >追加</button>
+            <button type='submit'  className="btn btn-dark btn-lg"   >追加</button>
         </div>
       </>)}
       

@@ -97,7 +97,7 @@ const AddTaskForm = ({token,changes,sub,subname}) => {
       {isLoading?<Skeleton/>:(<>
         <input type='text' name='name' placeholder='課題'  className='form-control mb-3' value={formData.name} onChange={handleChange}  />
         <div className="d-flex justify-content-center gap-3 mt-3">
-          {subname?(<button type='submit'  className="btn btn-dark btn-lg" data-bs-dismiss="modal"  >追加</button>):("")}
+          {subname?(<button type='submit'  className="btn btn-dark btn-lg"   >追加</button>):("")}
         </div>
         </>
       )}

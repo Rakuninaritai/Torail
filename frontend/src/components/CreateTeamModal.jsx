@@ -83,6 +83,8 @@ const CreateTeamModal = () => {
               value={name}
               onChange={e => setName(e.target.value)}
               required
+              pattern="[!-~]+"
+              title="半角英数字・記号（!～~）のみで入力してください。"
             />
           </div>
           <div className="modal-footer d-flex justify-content-center">
@@ -91,7 +93,7 @@ const CreateTeamModal = () => {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  data-bs-dismiss="modal"
+                  // data-bs-dismiss="modal"
                 >
                   作成
                 </button>

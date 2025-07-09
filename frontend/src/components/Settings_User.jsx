@@ -131,7 +131,8 @@ const Settings_User = () => {
         {isLoading?<Skeleton/>:(
           <>
               <label  htmlFor="username" className="form-label">ユーザー名</label>
-            <input type="text" className='form-control mb-3' name='username' value={formData.username} onChange={handleChange} required disabled={!isEditing}/>
+            <input type="text" className='form-control mb-3' name='username' value={formData.username} onChange={handleChange} required disabled={!isEditing} autoComplete="username" pattern="[!-~]+"
+            title="半角英数字・記号（!～~）のみで入力してください。"/>
             {errors.username && (
               <div className="text-danger mt-1">
                 {errors.username.map((msg, i) => (
@@ -158,7 +159,7 @@ const Settings_User = () => {
             pattern="(?=.*[A-Z])(?=.*\d).+"
             title="パスワードは8文字以上で、大文字と数字を含めてください"
             onInvalid={e => e.target.setCustomValidity("8文字以上で、大文字と数字を含む必要があります")}
-            onInput={e => e.target.setCustomValidity("")} disabled={!isEditing}/>
+            onInput={e => e.target.setCustomValidity("")} disabled={!isEditing} autoComplete="current-password"/>
             {errors.password1 && (
               <div className="text-danger mt-1">
                 {errors.password1.map((msg, i) => (

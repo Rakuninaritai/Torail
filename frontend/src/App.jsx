@@ -131,7 +131,7 @@ function App() {
               isActive ? 'nav-link active' : 'nav-link'
             }
             >
-              <i className="bi bi-gear"></i> 設定
+              <i className="bi bi-gear"></i> 設定・招待
             </NavLink>
             )}
         </div>
@@ -232,7 +232,7 @@ function App() {
               isActive ? 'nav-link active' : 'nav-link'
             }
             >
-              <i className="bi bi-gear"></i> 設計
+              <i className="bi bi-gear"></i> 設定・招待
             </NavLink>
             )}
             {Token && (

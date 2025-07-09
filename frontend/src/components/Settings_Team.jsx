@@ -126,7 +126,8 @@ const Settings_Team = () => {
         {isLoading?<Skeleton/>:(
           <>
             <label  htmlFor="name" className="form-label">チーム名</label>
-            <input type="text" className='form-control mb-3' name='name' value={formData.name} onChange={handleChange} required disabled={!isEditing}/>
+            <input type="text" className='form-control mb-3' name='name' value={formData.name} onChange={handleChange} required disabled={!isEditing} pattern="[!-~]+"
+             title="半角英数字・記号（!～~）のみで入力してください。"/>
             {errors.name && (
               <div className="text-danger mt-1">
                 {errors.username.map((msg, i) => (

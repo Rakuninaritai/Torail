@@ -1,9 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Chart } from 'chart.js/auto';
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
 
 const RecordsGraph = ({records}) => {
+  const [isLoading, setLoading] = useState(false);
   // recordsは各recordが入っている
   // ---選択しようstateのみなさん---
+  // データの存在有無
+  const [hasData, setHasData] = useState(true)
   // 各ブレイクダウンの状況用state
   const [breakdown,setBreakdown]=useState({
     breakdown:"language",
@@ -16,6 +21,7 @@ const RecordsGraph = ({records}) => {
     }
   )
   useEffect(()=>{
+    setLoading(true)
     // 東福を排除して登録するためにmapにする
     const uniqueSubjects=new Map()
     // mapでsetを使うと重複項目は最後のもののみ保持される
@@ -24,6 +30,7 @@ const RecordsGraph = ({records}) => {
     });
     // 配列にしてstateに入れてる(valuesに入っているらしい)
     SetSelectSubject(Array.from(uniqueSubjects.values()))
+    setLoading(false)
   },[records])
   // 値が変わったら更新する
   const handleChange=(e)=>{
@@ -95,7 +102,15 @@ const RecordsGraph = ({records}) => {
   }
   //--useEffect-recordやui状態(選択) が変わるたびに描画
   useEffect(()=>{
-    const {labels,data,details}=computeStats()
+    const {labels,data,details} = computeStats()
+ 
+    if (labels.length === 0) { 
+      // データなし 
+      chartRef.current?.destroy() 
+      setHasData(false) 
+      return 
+    } 
+    setHasData(true)
     // 古いグラフを破棄
     if(chartRef.current)chartRef.current.destroy();
 
@@ -159,12 +174,21 @@ const RecordsGraph = ({records}) => {
           </div>
         </div>
         <div className="stats-card mx-auto">
-          <div className="chart-container"  style={{ height:'300px' }}>
-            <canvas ref={canvasRef} />
-          </div>
-          <div id="detailView" className="mt-3 text-center text-muted">
-            <em>クリックで詳細表示</em>
-          </div>
+          {isLoading?<Skeleton height="100%" width="100%"/>: !hasData ?( 
+            <div className="d-flex align-items-center justify-content-center text-muted"
+            style={{ height: '100%' }}>
+              データがありません
+          </div>):(
+            <>
+              <div className="chart-container"  style={{ height:'300px' }}>
+                <canvas ref={canvasRef} />
+              </div>
+              <div id="detailView" className="mt-3 text-center text-muted">
+                <em>クリックで詳細表示</em>
+              </div>
+            </>
+          )}
+          
         </div>
     </div>
   )

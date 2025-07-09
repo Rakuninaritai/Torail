@@ -10,12 +10,12 @@ import Leave_Team from '../components/Leave_Team';
 // import TeamIntegrations from '../components/TeamIntegrations';
 
 const Settings = () => {
-  document.title="Torail|設定"
+  document.title="Torail|設定・招待"
   const { currentTeamId } = useTeam();
   const [inv,setInv]=useState(false);
   return (
     <div>
-      <h1><i className="bi bi-gear"></i> 設定</h1>
+      <h1><i className="bi bi-gear"></i> 設定・招待</h1>
         {currentTeamId?(<><Settings_Team/><Leave_Team/><Invition_Team key={inv} set={()=>setInv(!inv)}/></>):(<Settings_User/>)}
         <Invited_Team key={inv} set={()=>setInv(!inv)}/>
         <Settings_Subject_Task/>
