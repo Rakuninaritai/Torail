@@ -14,6 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 2) アプリケーションコード
 COPY . /app
 
+# 依存インストールまで終わったあと
+ENV FERNET_KEY=dummy_collectstatic_key
 # 3) 静的ファイル収集（本番想定）
 RUN mkdir -p "${STATIC_ROOT}" \
     && python manage.py collectstatic --noinput
