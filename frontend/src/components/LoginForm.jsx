@@ -41,7 +41,7 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
           setErrors(data)
           toast.error("エラーが発生しました。")
           setLoading(false)
-          console.log(data)
+          // console.log(data)
           return
         }
 
@@ -55,7 +55,7 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
         onLoginSuccess&&onLoginSuccess()
     } catch (err) {
       // ネットワークエラー等
-      console.error('Network or unexpected error:', err)
+      // console.error('Network or unexpected error:', err)
       setErrors({non_field_errors: ["通信エラーが発生しました。再度お試しください。"]})
       toast.error("通信エラーが発生しました。")
       setLoading(false)

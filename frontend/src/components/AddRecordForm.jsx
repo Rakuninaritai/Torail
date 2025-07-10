@@ -112,7 +112,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
         // エラー扱いになるが保存できている事象あり対応して(計測に戻ってしまうがhomeでは対応できる)
         setLoading(false)
     }catch(err){
-      console.error(err);
+      // console.error(err);
       setErrors(err)
       toast.error("タイマーの開始に失敗しました。")
       setLoading(false)

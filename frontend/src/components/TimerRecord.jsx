@@ -111,7 +111,7 @@ const TimerRecord = ({token,record,settimerchange}) => {
                 <option key={lang.id} value={lang.id}>{lang.name}</option>
               ))}
           </select>
-          <label htmlFor="description" className="form-label">説明</label>
+          <label htmlFor="description" className="form-label">メモ</label>
           {errors.description && (
           <div className="text-danger mt-1">
             {errors.description.map((msg, i) => (

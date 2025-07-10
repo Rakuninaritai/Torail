@@ -37,6 +37,7 @@ services:
     build:
       context: .                 # backend と同じイメージ
       dockerfile: Dockerfile.backend
+    entrypoint: [""] 
     command: celery -A Torail worker --loglevel=info
     env_file: .env
     volumes:
