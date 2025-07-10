@@ -12,8 +12,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 2) Procfile & entrypoint
-COPY Procfile .                 # /app/Procfile
-COPY entrypoint.sh .            # /app/entrypoint.sh
+COPY Procfile .              
+COPY entrypoint.sh .            
 RUN chmod +x entrypoint.sh
 
 # 3) アプリ本体
