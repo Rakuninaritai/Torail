@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
-set -e
+set -eu
+python manage.py collectstatic --noinput
 python manage.py migrate --noinput
-exec gunicorn Torail.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3 --log-file -
+exec gunicorn Torail.wsgi:application --bind 0.0.0.0:${PORT:-8000}
