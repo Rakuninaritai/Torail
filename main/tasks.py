@@ -188,3 +188,8 @@ def send_record_notification(record_id: str) -> None:
     )
     msg.attach_alternative(html_body, "text/html")
     msg.send()
+    try:
+        msg.send()
+        logger.info(f"✅ メール送信成功: to={recipients}")
+    except Exception as e:
+        logger.error(f"❌ メール送信失敗: {e}", exc_info=True)
