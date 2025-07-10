@@ -1,5 +1,4 @@
 #!/usr/bin/env sh
 set -e
-
-# Honcho が Procfile を読んで web と worker を並列起動します
-exec honcho start -f /app/Procfile
+python manage.py migrate --noinput
+exec gunicorn Torail.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3 --log-file -
