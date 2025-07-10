@@ -19,7 +19,7 @@ services:
   backend:
     build:
       context: .                 # ルートの Dockerfile を使う
-      dockerfile: Dockerfile.backend
+      # dockerfile: Dockerfile.backend
     env_file: .env
     volumes:
       - .:/app                   # ソースをマウント
@@ -36,9 +36,9 @@ services:
   worker:
     build:
       context: .                 # backend と同じイメージ
-      dockerfile: Dockerfile.backend
-    entrypoint: [""] 
-    command: celery -A Torail worker --loglevel=info
+      # dockerfile: Dockerfile.backend
+    entrypoint: [] 
+    command: ["celery", "-A", "Torail", "worker", "--loglevel=info"]
     env_file: .env
     volumes:
       - .:/app
