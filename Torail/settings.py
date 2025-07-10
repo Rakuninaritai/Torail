@@ -275,3 +275,18 @@ EMAIL_USE_SSL = False
 EMAIL_HOST_USER      = os.getenv("EMAIL_HOST_USER")      # .env から
 EMAIL_HOST_PASSWORD  = os.getenv("EMAIL_HOST_PASSWORD")  # .env から
 DEFAULT_FROM_EMAIL   = EMAIL_HOST_USER
+
+# debug要クリア後消す
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"verbose": {"format": "%(asctime)s [%(levelname)s/%(name)s] %(message)s"}},
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "verbose"},
+    },
+    "loggers": {
+        "": {"handlers": ["console"], "level": "INFO"},
+        "celery": {"handlers": ["console"], "level": "INFO", "propagate": True},
+        "main.tasks": {"handlers": ["console"], "level": "INFO", "propagate": True},
+    },
+}

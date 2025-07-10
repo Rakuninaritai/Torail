@@ -112,10 +112,13 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
 from .models import Record, TeamMembership
+from celery.utils.log import get_task_logger
 
+logger = get_task_logger(__name__)
 
 @shared_task(name="record_notification.send")
 def send_record_notification(record_id: str) -> None:
+    logger.info(f"📬 send_record_notification start: record_id={record_id}")
     """
     レコードが真に「完了状態 (timer_state==2)」かつ
     チームに属している場合のみ HTML メールを送信する。
