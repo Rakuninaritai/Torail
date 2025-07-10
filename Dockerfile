@@ -7,20 +7,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# 1) 依存関係をインストール
+# 1) 依存ライブラリ
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 2) Procfile と entrypoint をコピー
-COPY Procfile /app/Procfile
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+# 2) Procfile & entrypoint
+COPY Procfile .                 # /app/Procfile
+COPY entrypoint.sh .            # /app/entrypoint.sh
+RUN chmod +x entrypoint.sh
 
-# 3) アプリケーションコードをコピー
+# 3) アプリ本体
 COPY . /app
 
-# 4) 静的ファイル用ディレクトリを作成
-RUN mkdir -p "${STATIC_ROOT}"
+# 4) 静的ファイル用 dir
+RUN mkdir -p "$STATIC_ROOT"
 
-# 5) エントリポイントで Honcho を起動
-ENTRYPOINT ["/app/entrypoint.sh"]
+# 5) エントリポイント
+ENTRYPOINT ["./entrypoint.sh"]
