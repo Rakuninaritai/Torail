@@ -1,14 +1,26 @@
-# --- 1) 依存インストール -----------------
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    STATIC_ROOT=/app/staticfiles
+
+WORKDIR /app
+
+# 1) 依存関係をインストール
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- 2) アプリケーションコード -------------
+# 2) Procfile と entrypoint をコピー
+COPY Procfile /app/Procfile
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# 3) アプリケーションコードをコピー
 COPY . /app
 
-# --- 3) 静的ファイル収集は後でやる ---------
-ENV DISABLE_COLLECTSTATIC=1
-# ★ ここで collectstatic を呼ばない！
-# RUN python manage.py collectstatic --noinput ←消す
-#
-# --- 4) アプリ起動 -------------------------
-CMD ["gunicorn", "Torail.wsgi:application", "--bind", "0.0.0.0:8000"]
+# 4) 静的ファイル用ディレクトリを作成
+RUN mkdir -p "${STATIC_ROOT}"
+
+# 5) エントリポイントで Honcho を起動
+ENTRYPOINT ["/app/entrypoint.sh"]
