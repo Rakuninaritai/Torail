@@ -3,6 +3,9 @@ from django.contrib.auth.models import AbstractUser
 import uuid
 from django.conf import settings
 # from main.tsuchi_tsukawan.fields import EncryptedTextField 
+# 暗号用
+from cryptography.fernet import Fernet
+import base64
 
 User = settings.AUTH_USER_MODEL  # 抽象化したカスタムユーザーモデルを参照
 # ユーザーモデルをカスタムしている
@@ -29,6 +32,15 @@ class Team(models.Model):
         related_name='owned_teams' # user.owned_teams で取得可能
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    NOTIFY_CHOICES = [
+        ('slack', 'Slack'),
+        ('discord', 'Discord'),
+        ('email', 'Email'),
+        ('off', 'Off'),
+    ]
+    notify_mode = models.CharField(
+        max_length=10, choices=NOTIFY_CHOICES, default='off'
+    )
 
     def __str__(self):
         return self.name
@@ -198,15 +210,59 @@ class TeamInvitation(models.Model):
     class Meta:
         unique_together = ('team', 'invited_user')
         
-        
+from typing import List
+def _build_fernet_from_env_key(s: str | bytes):
+    from cryptography.fernet import Fernet
+    if isinstance(s, str):
+        s = s.encode()
+    # 32bytes の URL-safe Base64 文字列が前提
+    return Fernet(s)
 
+def _build_fernet_from_secret(secret: str) -> Fernet:
+    # 旧方式（SECRET_KEY 32バイト切り出し→ゼロパディング→base64）
+    key = secret.encode()[:32].ljust(32, b"0")
+    return Fernet(base64.urlsafe_b64encode(key))
+
+def _fernets_for_decrypt() -> List[Fernet]:
+    """
+    復号時に試す鍵の候補を列挙（新→旧の順）
+    """
+    fns: List[Fernet] = []
+    # 新: FERNET_KEY（推奨）
+    fk = getattr(settings, "FERNET_KEY", None)
+    if fk:
+        fns.append(_build_fernet_from_env_key(fk))
+    # 旧: SECRET_KEY 派生
+    sk = getattr(settings, "SECRET_KEY", None)
+    if sk:
+        fns.append(_build_fernet_from_secret(sk))
+    # さらに一時的な旧鍵がある場合（例：移行期間）
+    ofk = getattr(settings, "OLD_FERNET_KEY", None)
+    if ofk:
+        fns.append(_build_fernet_from_env_key(ofk))
+    if not fns:
+        raise RuntimeError("No Fernet key found. Set FERNET_KEY (recommended).")
+    return fns
+
+def _fernet_primary() -> Fernet:
+    """
+    暗号化（保存）に使う主鍵：FERNET_KEY があればそれを使う。
+    無ければ SECRET_KEY 派生（非推奨だが後方互換）。
+    """
+    fk = getattr(settings, "FERNET_KEY", None)
+    if fk:
+        return _build_fernet_from_env_key(fk)
+    sk = getattr(settings, "SECRET_KEY", None)
+    if sk:
+        return _build_fernet_from_secret(sk)
+    raise RuntimeError("FERNET_KEY or SECRET_KEY is not set")
 # 通知連携用
 # 現状メールのみで使わないが残しとく
 class Integration(models.Model):
     """
     1レコード = 1チームの 1チャネル連携
     provider   : 'discord' / 'slack' / 'teams'
-    access_tok : Bot / App 用トークン（暗号化）
+    _access_tok: Bot / App 用トークン（暗号化） ← BinaryField に変更
     workspace  : Discord = guild_id, Slack = workspace_id, Teams = team_id
     channel_id : 送信先チャネル
     """
@@ -215,10 +271,29 @@ class Integration(models.Model):
     provider     = models.CharField(max_length=10,
                      choices=[('discord', 'Discord'), ('slack', 'Slack'), ('teams', 'Teams')])
     # access_token =  EncryptedTextField()        # at rest で暗号化
-    access_token = models.TextField(blank=True, null=True)
+    _access_token = models.BinaryField(null=True, blank=True)
     workspace_id = models.CharField(max_length=255)
     channel_id   = models.CharField(max_length=255)
     created_at   = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ('team', 'provider')  # 1プロバイダーにつき1連携
+    
+    # ▼ プロパティで透過的に暗号化/復号する
+    @property
+    def access_token(self) -> str | None:
+        from cryptography.fernet import InvalidToken
+        if not self._access_token:
+            return None
+        ct = bytes(self._access_token)
+        for f in _fernets_for_decrypt():
+            try:
+                return f.decrypt(ct).decode()
+            except InvalidToken:
+                continue
+        # どの鍵でも復号できない
+        raise InvalidToken("Access token decrypt failed with all candidate keys.")
+
+    @access_token.setter
+    def access_token(self, value: str | None):
+        self._access_token = _fernet_primary().encrypt(value.encode()) if value else None

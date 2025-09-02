@@ -13,7 +13,7 @@ const CreateTeamModal = () => {
   // コンテキストからチーム再取得関数と選んだチームを設定する用の関数を引っ張ってくる。
   const { refreshTeams, selectTeam } = useTeam()
   // エラー表示などのmessagestate
-    const [errors,setErrors]=useState("")
+    const [errors,setErrors]=useState({})
 
   const handleSubmit = async e => {
     setLoading(true)
@@ -81,10 +81,10 @@ const CreateTeamModal = () => {
               className="form-control"
               placeholder="チーム名を入力"
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={e => setName(e.target.value).replace(/\//g, '')}
               required
-              pattern="[!-~]+"
-              title="半角英数字・記号（!～~）のみで入力してください。"
+              pattern="(?!.*\/)[!-~]+"
+              title="半角英数字・記号（!～~）のみで入力してください。ただし / は使用不可。"
             />
           </div>
           <div className="modal-footer d-flex justify-content-center">

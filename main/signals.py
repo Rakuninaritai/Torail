@@ -4,7 +4,7 @@ from django.db import transaction
 from django.dispatch import receiver
 
 from .models import Record
-from .tasks import send_record_notification
+from .tasks import dispatch_record_notification
 
 
 @receiver(pre_save, sender=Record)
@@ -35,10 +35,15 @@ def record_timer_finished(sender, instance: Record, created: bool, **kwargs):
     """
     if created:
         return  # 新規レコードは対象外
+    
+    # チーム未所属レコードはそもそも通知しない（無駄キュー削減）
+    if not instance.team_id:
+        return
 
     old_state = getattr(instance, "_old_timer_state", None)
 
+    # 0/1/None → 2 に遷移したときだけ
     if old_state != 2 and instance.timer_state == 2:
-        transaction.on_commit(
-            lambda: send_record_notification.delay(str(instance.pk))
-        )
+        rid = str(instance.pk)
+        # 送信先（メール/Slack/Discord）は tasks 側で集約判定
+        transaction.on_commit(lambda: dispatch_record_notification.delay(rid))

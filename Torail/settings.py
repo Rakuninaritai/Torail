@@ -33,10 +33,11 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 
 
 ALLOWED_HOSTS = [
-    'torailback-production.up.railway.app',  # Railway の自動ドメイン
+    'back.torail.app',  
     'torail.app',                        # （将来使う）独自ドメイン
     'localhost',
     '127.0.0.1',
+    '.ngrok-free.app',
 ]
 
 
@@ -58,6 +59,7 @@ INSTALLED_APPS = [
     'allauth',#djangoallauthの機能
     'allauth.account',#ユーザーのアカウント管理向け
     'allauth.socialaccount',  # ソーシャルログインを後から追加する場合に必要
+    'allauth.socialaccount.providers.google',
     'dj_rest_auth',#ログインログアウトのエンドポイントを提供
     'dj_rest_auth.registration',#ユーザー登録用のエンドポイント用
     ###
@@ -80,6 +82,13 @@ MIDDLEWARE = [
 ]
 # django-allauth用
 SITE_ID=1
+# settings.py
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+
+LOGIN_REDIRECT_URL = "/api/auth/social/jwt/"
 # allauth用の設定達
 # メールアドレスの検証(メール確認リンク)をnone(本番mandatory)(送られてくるメールを踏んで初めて登録できるようになる)
 ACCOUNT_EMAIL_VERIFICATION = 'none'
@@ -91,9 +100,29 @@ ACCOUNT_LOGIN_METHODS = {'username'}   # または 'email'
 ACCOUNT_EMAIL_REQUIRED = True
 # メルアド重複排除
 ACCOUNT_UNIQUE_EMAIL = True
+# ログインしますかみたいなやつを消すのtrue
+SOCIALACCOUNT_LOGIN_ON_GET = True
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET") 
+# デフォは開発用コールバック。Google側の認証情報に登録必須 
+GOOGLE_REDIRECT_URI = os.getenv( 
+    "GOOGLE_REDIRECT_URI", 
+    "http://localhost:8000/accounts/google/login/callback/" 
+) 
+ 
+SOCIALACCOUNT_PROVIDERS = { 
+    "google": { 
+        "APP": { 
+            "client_id": GOOGLE_CLIENT_ID, 
+            "secret": GOOGLE_CLIENT_SECRET, 
+            "key": "", 
+        }, 
+        "SCOPE": ["openid", "email", "profile"], 
+        "AUTH_PARAMS": {"access_type": "online"}, 
+    }, 
+}
 
 # メール送信用のやつ
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
@@ -110,7 +139,7 @@ ROOT_URLCONF = "Torail.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -122,6 +151,14 @@ TEMPLATES = [
         },
     },
 ]
+# 静的ファイル
+STATIC_URL = "static/"
+STATICFILES_DIRS = [BASE_DIR / "static"]
+
+# ソーシャルサインアップのフォーム差し替え
+SOCIALACCOUNT_FORMS = {
+    "signup": "main.forms.MySocialSignupForm"
+}
 
 WSGI_APPLICATION = "Torail.wsgi.application"
 
@@ -217,14 +254,21 @@ REST_AUTH = {
 
 
 # ----- CORS / CSRF / Cookie の設定 -----
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = "https" 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "https://torail.app",
     "http://localhost:5173",  # ← 開発用
+    "https://back.torail.app",
+    "https://821279b47c13.ngrok-free.app",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "https://torail.app",
     "http://localhost:5173",  # ← ここを必ず正確に
+    "https://back.torail.app",
+    "https://821279b47c13.ngrok-free.app",
 ]
 if DEBUG:
     # 開発時：ローカルから自由に叩けるように
@@ -246,16 +290,16 @@ else:
 
 FERNET_KEY = os.environ["FERNET_KEY"]
 # # ----- Discord OAuth -----
-# DISCORD_CLIENT_ID        = os.getenv("DISCORD_CLIENT_ID")
-# DISCORD_CLIENT_SECRET    = os.getenv("DISCORD_CLIENT_SECRET")
-# DISCORD_REDIRECT_URI     = os.getenv("DISCORD_REDIRECT_URI")
-# DISCORD_PERMS            = os.getenv("DISCORD_PERMS")
-# DISCORD_BOT_TOKEN=os.getenv("DISCORD_BOT_TOKEN")
+DISCORD_CLIENT_ID        = os.getenv("DISCORD_CLIENT_ID")
+DISCORD_CLIENT_SECRET    = os.getenv("DISCORD_CLIENT_SECRET")
+DISCORD_REDIRECT_URI     = os.getenv("DISCORD_REDIRECT_URI")
+DISCORD_PERMS            = os.getenv("DISCORD_PERMS")
+DISCORD_BOT_TOKEN=os.getenv("DISCORD_BOT_TOKEN")
 
 # ----- Slack OAuth -----
-# SLACK_CLIENT_ID          = os.getenv("SLACK_CLIENT_ID")
-# SLACK_CLIENT_SECRET      = os.getenv("SLACK_CLIENT_SECRET")
-# SLACK_REDIRECT_URI       = "https://torail.app/api/integrations/slack/callback/"
+SLACK_CLIENT_ID          = os.getenv("SLACK_CLIENT_ID")
+SLACK_CLIENT_SECRET      = os.getenv("SLACK_CLIENT_SECRET")
+SLACK_REDIRECT_URI       = os.getenv("SLACK_REDIRECT_URI")
 
 # ----- Celery -----
 CELERY_BROKER_URL        = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -290,3 +334,5 @@ DEFAULT_FROM_EMAIL   = EMAIL_HOST_USER
 #         "main.tasks": {"handlers": ["console"], "level": "INFO", "propagate": True},
 #     },
 # }
+# 通知設定用
+TORAIL_NOTIFY_PRIORITY = os.getenv("TORAIL_NOTIFY_PRIORITY", "slack,email,discord")

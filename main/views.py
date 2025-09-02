@@ -33,6 +33,9 @@ class BaseSharedViewSet(viewsets.ModelViewSet):
     def get_shared_queryset(self, model_cls):
         user       = self.request.user
         team_param = self.request.query_params.get('team')
+         # team=null → 個人レコードのみ
+        if team_param is not None and str(team_param).lower() == 'null':
+            return model_cls.objects.filter(user=user, team__isnull=True)
 
         # 2) team=all
         if team_param == 'all':
@@ -52,7 +55,7 @@ class BaseSharedViewSet(viewsets.ModelViewSet):
 
         
 
-        # 3) team=null ／ パラメータなし
+        # 3) パラメータなし（= 個人デフォルト）
         return model_cls.objects.filter(user=user, team__isnull=True)
 
 
@@ -95,8 +98,12 @@ class RecordViewSet(viewsets.ModelViewSet):
         user       = self.request.user
         team_param = self.request.query_params.get('team')
 
-        # 1) team=<数字> のときは特定チームのレコードのみ
-        if team_param :
+        # 1) team=null → 個人レコードだけ
+        if team_param is not None and str(team_param).lower() == 'null':
+            return Record.objects.filter(user=user, team__isnull=True)
+
+        # 2) team=<UUID> → 特定チームのレコードのみ
+        if team_param:
             team = get_object_or_404(
                 Team,
                 id=team_param,
@@ -104,7 +111,7 @@ class RecordViewSet(viewsets.ModelViewSet):
             )
             return Record.objects.filter(team=team)
 
-        # 2) それ以外（パラメータなし／team=null／team=all）はすべて取得
+        # 2) それ以外（パラメータなし／team=all相当）はすべて取得
         return Record.objects.filter(
             Q(user=user,            team__isnull=True)  | 
             Q(team__memberships__user=user)
@@ -260,64 +267,33 @@ class TeamViewSet(viewsets.ModelViewSet):
 #   def perform_create(self, serializer):
 #       serializer.save(user=self.request.user)
     
-# ログイン成功時tokenを発行してhttponlycookieにsetするビュー
-class CookieTokenObtainPairView(TokenObtainPairView):
-  def post(self,request,*args,**kwargs):
-    #まず標準処理でアクセストークン/リフレッシュトークンを得る
-    response = super().post(request,*args,**kwargs)
-    # cookieに設定
-    response.set_cookie(
-      'access_token',
-      response.data['access'],
-      httponly=True,
-      # secure=False,#開発用
-      secure=True,##本番用
-      samesite='None',##本番用
-      # samesite='Lax',
-      path='/',
-    )
-    response.set_cookie(
-        'refresh_token',
-        response.data['refresh'],
-        httponly=True,
-        # secure=False,#開発
-        secure=True,##本番用
-        samesite='None',##本番用
-        # samesite='Lax',
-        path='/',
-      )
-    # ボディからトークンを削除
-    response.data.pop('access',None)
-    response.data.pop('refresh',None)
-    return response
-  
+def _cookie_opts():
+    if settings.DEBUG:
+        # ローカル http://localhost:5173 / Vite プロキシ運用
+        return dict(httponly=True, secure=False, samesite='Lax', path='/')
+    else:
+        # 本番 https://torail.app （フロント別オリジンなら None）
+        return dict(httponly=True, secure=True, samesite='None', path='/')
 
-# リフレッシュ用
-class CookieTokenRefreshView(TokenRefreshView):
-    """
-    リフレッシュ時にも、新しい access_token を HttpOnly Cookie にセット。
-    """
+class CookieTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
-        # 1) Cookie から refresh_token を取得
+        response = super().post(request, *args, **kwargs)
+        opts = _cookie_opts()
+        response.set_cookie('access_token',  response.data['access'],  **opts)
+        response.set_cookie('refresh_token', response.data['refresh'], **opts)
+        response.data.pop('access', None)
+        response.data.pop('refresh', None)
+        return response
+
+class CookieTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
         refresh = request.COOKIES.get('refresh_token')
         if not refresh:
             return Response({'detail': 'refresh token が見つかりません'}, status=400)
-        # 2) request.data に入れて super に委譲
         request.data['refresh'] = refresh
-        # 通常のリフレッシュ
         response = super().post(request, *args, **kwargs)
-        # Set-Cookie で上書き
-        response.set_cookie(
-            'access_token',
-            response.data['access'],
-            httponly=True,
-            # secure=False,      # 本番は True
-            secure=True,##本番用
-            samesite='None',##本番用
-            # samesite='Lax',
-            path='/',
-        )
-        # ボディからは隠す
+        opts = _cookie_opts()
+        response.set_cookie('access_token', response.data['access'], **opts)
         response.data.pop('access', None)
         return response
       

@@ -19,8 +19,22 @@ const TimerContorl = ({token,records,settimerchange}) => {
   // Vite のケース
   const API_BASE = import.meta.env.VITE_API_BASE_URL
   // タイマの動作のstate
-  // 実行中のレコードを取り出し
-  const record=records.find(rec=>rec.user.id==token.pk)
+  // チームのidをどの形でも取得(id{}や文字列)
+  const toId = v => (v && typeof v === 'object') ? (v.id ?? null) : v ?? null;
+  const record = (records ?? []).find(r =>
+    r?.user?.id === token.pk &&
+     // チーム一致（個人＝どちらも未設定）だけ許可
+    ((toId(r.team) === toId(currentTeamId)) || (!toId(r.team) && !toId(currentTeamId))) &&
+    // 完了(2)は除外
+    r.timer_state !== 2
+  );
+  if (!record) {
+    return (
+      <div className="timer-card mx-auto">
+        <Skeleton />
+      </div>
+    );
+  }
   
   // 経過時間取り出し(中断していたらその数字、していないなら0)
   const inialElaapsed=record.duration? record.duration:0

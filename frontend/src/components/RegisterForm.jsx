@@ -57,13 +57,22 @@ const RegisterForm = ({onLoginSuccess,settoken,hc}) => {
       setLoading(false)
     }
     }
-  
+  const BACKEND_BASE = import.meta.env.VITE_BACKEND_ORIGIN;
   return (
     <div className='timer-card mx-auto'>
       <form onSubmit={handleSubmit}>
         <h2>登録</h2>
         <div className="d-flex justify-content-center gap-3 mt-3">
           <button type='button'  className="btn btn-dark btn-md" onClick={()=>hc()}   >ログインはこちら</button>
+          <button
+            type="button"
+            className="btn btn-outline-secondary"
+            onClick={() => {
+              window.location.href = `${BACKEND_BASE}/accounts/google/login/?process=login`;
+            }}
+          >
+            <i className="bi bi-google me-1"></i> Googleで続行
+          </button>
         </div>
         {/* 送信エラー */}
           {errors.detail && (

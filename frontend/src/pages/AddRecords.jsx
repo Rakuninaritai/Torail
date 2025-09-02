@@ -34,56 +34,40 @@ const AddRecords= ({token,onRecordAdded,updateFlag}) => {
   const [runningRecord,setRunningRecord]=useState()
   // 計測中のレコードを取得(appのレコード作成管理用のstateのsetを引っ張って状態更新してるんでそのstateを持ってきて状態管理)
   useEffect(() => {
-    const shutoku = async ()=>{
-          setLoading(true)
-          setRunningRecord([])
-          try{
-            // console.log(token)
-            setOtherAddnow("")
-            // const path = currentTeamId
-            // ? `/records/?team=${currentTeamId}`
-            // : '/records/';
-            // const ss=await api(path,{
-            //   method: 'GET',
-            // })
-            const aa=await api(`/records/`,{
-              method: 'GET',
-            })
-            // console.log(ss)
-            // 停止でないタイマーがあればallへ
-            const all = aa.filter(record => record.timer_state!=2 && record.user.id === token.pk);
-            const running = all.filter(r => {
-             ;
-              if (currentTeamId) {
-                return r.team === currentTeamId;
-              } else {
-                // r.team が null か undefined のみを許可する
-                return (r.team === null || r.team === undefined);
-              }
-          });
-            if(all.length>0&&running.length===0){
-              setOtherAddnow("ほかのチームまたは個人であなたは計測中です。")
-            }
-            setLoading(false)
-            setRunningRecord(running);
-            // console.log(running)
-            
-          }catch (err) {
-            // console.error(err);
-            setErrors(err)
-            setLoading(false)
-          }
-          
-          
+    let ignore=false; const ac=new AbortController();
+    (async () => {
+      setLoading(true);
+      try{
+        const teamParam = currentTeamId ? `?team=${currentTeamId}` : `?team=null`;
+        // ← 同時に取得してレースを減らす
+        const [all, ss] = await Promise.all([
+          api(`/records/`, { method:'GET', signal: ac.signal }),
+          api(`/records/${teamParam}`, { method:'GET', signal: ac.signal })
+        ]);
+        const allMine = all.filter(r => r.timer_state !== 2 && r.user.id === token.pk);
+        const running = ss.filter(r => r.timer_state !== 2 && r.user.id === token.pk);
+        if(!ignore){
+          setOtherAddnow(allMine.length>0 && running.length===0 ? "ほかのチームまたは個人であなたは計測中です。" : "");
+          setRunningRecord(running);           // ★ クリアしない
         }
-        shutoku()
-
-   
-  }, [token,updateFlag,TimerChange,currentTeamId]);
+      } catch(e){ if(!ignore) setErrors(e); }
+      finally { if(!ignore) setLoading(false); }
+    })();
+    
+    return ()=>{ ignore=true; ac.abort(); };
+    
+  }, [token, updateFlag, TimerChange, currentTeamId]);
+  const toId = v => (v && typeof v === 'object') ? (v.id ?? null) : v ?? null;
+    const scopedRunning = (runningRecord ?? []).filter(r => {
+    const rTeam = toId(r.team);
+    const cur    = toId(currentTeamId);
+    const teamMatch = (rTeam === cur) || (!rTeam && !cur);
+    return teamMatch && r.user.id === token.pk && r.timer_state !== 2;
+    });
   return (
     <div id='record'>
       <h1><i className="bi bi-clock"></i> 測定</h1>
-      {isLoading?(<div className="timer-card mx-auto"><Skeleton/></div>):(<>{OtherAddNow?(<div className="timer-card mx-auto">{OtherAddNow}</div>):runningRecord && runningRecord.length > 0?(<TimerContorl token={token} records={runningRecord} key={runningRecord} settimerchange={Timer_State_Change}/>):(
+      {isLoading?(<div className="timer-card mx-auto"><Skeleton/></div>):(<>{OtherAddNow?(<div className="timer-card mx-auto">{OtherAddNow}</div>):scopedRunning.length > 0 ?(<TimerContorl token={token} records={scopedRunning}  settimerchange={Timer_State_Change}/>):(
         <div>
           {/* データ取得時エラー */}
           {errors.detail && (

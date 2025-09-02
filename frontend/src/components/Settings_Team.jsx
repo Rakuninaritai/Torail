@@ -6,6 +6,10 @@ import { useTeam } from '../context/TeamContext';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 import { toast } from 'react-toastify';
+import NotifyMethodSelector from './NotifyMethodSelector';
+import DiscordPanel from './DiscordPanel';
+import SlackPanel from './SlackPanel';
+import EmailPanel from './EmailPanel';
 
 const Settings_Team = () => {
   const [isLoading, setLoading] = useState(false);
@@ -17,32 +21,25 @@ const Settings_Team = () => {
   const [isEditing, setIsEditing] = useState(false);
   // エラー表示などのmessagestate
   const [errors,setErrors]=useState("")
-  useEffect(()=>{
-    const shutoku = async ()=>{
-              setLoading(true)
-              try{
-                const ss=await api(`/teams/${currentTeamId}/`,{
-                  method: 'GET',
-                })
-                // form用これを変えていく
-                setFormData({
-                    name: ss.name,   
-                  })
-                // 引っ張て来たデータ参照用
-                setinitialData({
-                    name: ss.name,
-                    id:ss.id,
-                  })
-                setLoading(false)
-              }catch (err) {
-                // console.error(err);
-                setLoading(false)
-                setErrors(err)
-              }
-                
-            }
-            shutoku()
-  },[])
+  const [team, setTeam] = useState(null); // name等もまとめて保持
+  const [notifyMode, setNotifyMode] = useState("off");
+
+  useEffect(() => {
+  const f = async () => {
+    setLoading(true);
+    try {
+      const t = await api(`/teams/${currentTeamId}/`, { method: "GET" });
+      setTeam(t);
+      // form用これを変えていく
+      setFormData({ name: t.name });
+      // 引っ張て来たデータ参照用
+      setinitialData({ name: t.name, id: t.id });
+      setNotifyMode(t.notify_mode || "auto");
+    } catch (e) { setErrors(e); }
+    finally { setLoading(false); }
+  };
+  if (currentTeamId) f();
+}, [currentTeamId]);
   const handleEdit=()=>{
     setIsEditing(!isEditing)
   }
@@ -72,7 +69,7 @@ const Settings_Team = () => {
       }
     }
   const handleChange=(e)=>{
-    setFormData({...formData,[e.target.name]:e.target.value})
+    setFormData({...formData,[e.target.name]:e.target.value.replace(/\//g, '')})
   }
   const handleSubmit=async (e)=>{
     setLoading(true)
@@ -98,7 +95,8 @@ const Settings_Team = () => {
         // console.log("ユーザー情報が更新されました",data)
         toast.success("チーム情報が更新されました!")
         setLoading(false)
-        refreshTeams()
+        await refreshTeams()
+        navigate(`/${encodeURIComponent(recordData.name)}/settings`, { replace: true });
         handleEdit()
         }catch(err){
           // console.error(err);
@@ -107,6 +105,8 @@ const Settings_Team = () => {
           setErrors(err)
         }
   }
+
+
   return (
     <div className='timer-card mx-auto'>
       <form onSubmit={handleSubmit}>
@@ -127,8 +127,8 @@ const Settings_Team = () => {
         {isLoading?<Skeleton/>:(
           <>
             <label  htmlFor="name" className="form-label">チーム名</label>
-            <input type="text" className='form-control mb-3' name='name' value={formData.name} onChange={handleChange} required disabled={!isEditing} pattern="[!-~]+"
-             title="半角英数字・記号（!～~）のみで入力してください。"/>
+            <input type="text" className='form-control mb-3' name='name' value={formData.name} onChange={handleChange} required disabled={!isEditing} pattern="(?!.*\/)[!-~]+"
+             title="半角英数字・記号（!～~）のみで入力してください。ただし / は使用不可。"/>
             {errors.name && (
               <div className="text-danger mt-1">
                 {errors.username.map((msg, i) => (
@@ -173,6 +173,34 @@ const Settings_Team = () => {
         )}
         
       </form>
+      <hr className="my-4" />
+      <h3 className="mb-3">通知設定</h3>
+
+      {isLoading ? (
+        // セレクタ＋3パネル分のSkeletonをまとめて
+        <div className="d-grid gap-3">
+          <Skeleton height={80} />
+          <Skeleton height={220} />
+          <Skeleton height={220} />
+          <Skeleton height={140} />
+        </div>
+      ) : (
+        <>
+          <NotifyMethodSelector
+            teamId={currentTeamId}
+            initialMode={notifyMode}
+            onChange={setNotifyMode}
+            loading={isLoading || notifyMode === null}
+          />
+          <div className="mt-3 d-grid gap-3">
+            <SlackPanel   teamId={currentTeamId} enabled={notifyMode === "slack"} />
+            <DiscordPanel teamId={currentTeamId} enabled={notifyMode === "discord"} />
+            <EmailPanel   teamId={currentTeamId} enabled={notifyMode === "email"} />
+          </div>
+        </>
+      )}
+
+
     </div>
     
   )

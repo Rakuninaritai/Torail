@@ -155,10 +155,7 @@ class RecordWriteSerializer(serializers.ModelSerializer):
     fields=[ 'subject', 'task', 'language', 'date', 'description', 'duration', 'start_time', 'end_time','stop_time','timer_state','team']
     
   def create(self, validated_data):
-        rec = super().create(validated_data)
-        from .tasks import send_record_notification
-        send_record_notification.delay(rec.id)
-        return rec
+        return super().create(validated_data)
     
     
 # メルアド重複を500エラーではなく400エラーで出すためのシリアライザ
@@ -203,7 +200,7 @@ class TeamSerializer(serializers.ModelSerializer):
     )
     class Meta:
         model = Team
-        fields = ['id', 'name', 'owner', 'created_at','memberships', ]
+        fields = ['id', 'name', 'owner', 'created_at','memberships','notify_mode' ]
 
 
 

@@ -65,6 +65,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
         
     }
     shutoku()
+    
   },[currentTeamId])
 
   // 値が変わったら更新する

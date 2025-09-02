@@ -59,13 +59,25 @@ export async function api(path, options = {}) {
     }
   }
 
-  // ③ JSON パース
-  const data = res.status === 204 ? null : await res.json();
+  // // ③ JSON パース
+  // const data = res.status === 204 ? null : await res.json();
 
-  // ④ ステータスチェック
-  if (!res.ok) {
-    // 400/500 系は呼び出し元にそのまま投げる
-    throw data;
-  }
-  return data;
+  // // ④ ステータスチェック
+  // if (!res.ok) {
+  //   // 400/500 系は呼び出し元にそのまま投げる
+  //   throw data;
+  // }
+  // return data;
+  // ③ JSON パース
+const text = res.status === 204 ? '' : await res.text();
+let data;
+try { data = text ? JSON.parse(text) : null; }
+catch { data = { raw: text }; }
+
+// ④ ステータスチェック
+if (!res.ok) {
+  // ステータスと本文をそのまま throw
+  throw { status: res.status, ...data };
+}
+return data;
 }

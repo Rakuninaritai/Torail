@@ -62,7 +62,7 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
     }
     }
 
-
+  const BACKEND_BASE = import.meta.env.VITE_BACKEND_ORIGIN;
 
 
   
@@ -72,7 +72,17 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
         <h2>ログイン</h2>
         <div className="d-flex justify-content-center gap-3 mt-3">
           <button type='button'  className="btn btn-dark btn-md" onClick={()=>hc()}   >会員登録はこちら</button>
+          <button
+            type="button"
+            className="btn btn-outline-secondary"
+            onClick={() => {
+              window.location.href = `${BACKEND_BASE}/accounts/google/login/?process=login`;
+            }}
+          >
+            <i className="bi bi-google me-1"></i> Googleで続行
+          </button>
         </div>
+        
         {/* 送信エラー */}
           {errors.detail && (
             <div className="text-danger mt-1">

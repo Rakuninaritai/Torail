@@ -7,6 +7,7 @@ import { api } from '../api'  // 共通APIラッパー
 const TeamContext = createContext()
 
 export const TeamProvider = ({ children }) => {
+  
   // ② 所属チーム一覧＆選択中チームID
   const [teams, setTeams] = useState([])             
   const [currentTeamId, setCurrentTeamId] = useState(null)
@@ -16,13 +17,15 @@ export const TeamProvider = ({ children }) => {
     api('/teams/', { method: 'GET' })
       .then(data => {
         setTeams(data)
-        // デフォルトは「個人モード( null )」または先頭チーム
-        // setCurrentTeamId(data.length > 0 ? data[0].id : null)
-        setCurrentTeamId(null)
+        setCurrentTeamId(prev => {
+          // すでに選択があるなら維持
+          if (typeof prev === 'string' && prev) return prev;
+          // 初回だけデフォルト（個人のままでもOK）
+          return null; // もしくは data[0]?.id
+        });
       })
       .catch(console.error)
   }, [])
-
   // ④ Context API で提供する値
   return (
     // こうすること(childrenを挟む)でteamcontentで挟んだらUseTheamをして各変数を呼ぶことが出来る。
