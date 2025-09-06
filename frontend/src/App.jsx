@@ -1,7 +1,9 @@
-
-// 統計チームのほかの人引っ張ってきている(個人はその人の作成の奴、チームはそのやつ)
+// signupのテンプレの戻るボタンとサクセスの通知消す
+// 統計チームのほかの人引っ張ってきている(個人はその人の作成の奴、チームはそのやつ)あと統計日付順で
 // 言語複数選択、言語履歴呼び出し
 // ログイン後前の奴にリンクさせてブロックしているのなら
+// 招待での取得時emailは除外してもいいかも
+// pw忘れ対応、グーグルソーシャル赤餅でも(いずれもmyp後)
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, Route, Routes, useNavigate, useParams, useLocation } from 'react-router-dom';
 
@@ -123,7 +125,15 @@ function App() {
     setLogin(!Login);
     navigate('/');
   };
-
+  // ソーシャルログインが完了するとフロントにurl付きで送ってくるからそれを判断してトースト出してurl消す
+  useEffect(() => {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get('login') === 'ok') {
+    toast.success('ログインに成功しました!');
+    url.searchParams.delete('login');
+    window.history.replaceState({}, '', url.pathname + (url.search ? '?' + url.search : '') + url.hash);
+  }
+}, []);
   useEffect(() => {
     setLoading(true);
     setTimeout(() => {

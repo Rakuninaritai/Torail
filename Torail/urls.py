@@ -60,13 +60,23 @@ def _cookie_opts(request=None):
 
 @require_GET
 def social_jwt_issuer(request):
-    # allauth がセッションログイン済みでここへ遷移してくる想定
     if not request.user.is_authenticated:
         return redirect(f"{settings.FRONTEND_URL.rstrip('/')}/login?error=social_auth_failed")
 
     refresh = RefreshToken.for_user(request.user)
-    resp = redirect(settings.FRONTEND_URL.rstrip('/') + "/")
-    opts = _cookie_opts(request)
+
+    # フロントの遷移先（/ 以外を許すなら next パラメータを安全に許容）
+    next_path = request.GET.get("next", "/")
+    # オープンリダイレクト防止：先頭が / でない or 外部URLなら無視
+    if not next_path.startswith("/"):
+        next_path = "/"
+
+    # ?login=ok を付与してトースト合図
+    sep = "&" if "?" in next_path else "?"
+    target = f"{settings.FRONTEND_URL.rstrip('/')}{next_path}{sep}login=ok"
+
+    resp = redirect(target)
+    opts = _cookie_opts(request)  # SameSite/Lax or None の既存関数
     resp.set_cookie("access_token",  str(refresh.access_token), **opts)
     resp.set_cookie("refresh_token", str(refresh),            **opts)
     return resp
@@ -133,18 +143,3 @@ urlpatterns += [
 ]
 
 
-# urls.py に一時追加
-from django.http import JsonResponse
-from django.views.decorators.http import require_GET
-
-@require_GET
-def whoami(request):
-    return JsonResponse({
-        "cookies_seen": list(request.COOKIES.keys()),
-        "is_secure": request.is_secure(),
-        "xf_proto": request.META.get("HTTP_X_FORWARDED_PROTO"),
-        "auth": request.user.is_authenticated,
-        "user": getattr(request.user, "username", None),
-    })
-
-urlpatterns += [ path("whoami", whoami) ]
