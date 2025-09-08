@@ -129,33 +129,55 @@ class RecordReadSerializer(serializers.ModelSerializer):
   user=UserSerializer(read_only=True)
   subject=SubjectSerializer(read_only=True)
   task=TaskSerializer(read_only=True)
-  language=LanguageSerializer(read_only=True)
+  languages = LanguageSerializer(many=True, read_only=True)
   
   class Meta:
     model=Record
-    fields=['id', 'user', 'subject', 'task', 'language', 'date', 'description', 'duration', 'start_time', 'end_time','stop_time','timer_state','team']
+    fields=['id', 'user', 'subject', 'task', 'languages', 'date', 'description', 'duration', 'start_time', 'end_time','stop_time','timer_state','team']
     
 # Recordモデルのシリアライザ(書き込み用)
+# main/serializers.py の RecordWriteSerializer を修正
+
 class RecordWriteSerializer(serializers.ModelSerializer):
-  # 選択肢があるフィールドを引っ張ってきてる(idで呼ぶ、全選択肢を(viewで当該ユーザーのみ))
-  subject=serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all())
-  task=serializers.PrimaryKeyRelatedField(queryset=Task.objects.all())
-  language=serializers.PrimaryKeyRelatedField(queryset=Language.objects.all(),
-                                              allow_null=True,      # nullを許可する
-                                              required=False        # 必須ではない
-  )
-  # 書き込み時にチーム指定を可能にする
-  team = serializers.PrimaryKeyRelatedField(
-      queryset=Team.objects.all(),
-      allow_null=True,
-      required=False
-  )
-  class Meta:
-    model=Record
-    fields=[ 'subject', 'task', 'language', 'date', 'description', 'duration', 'start_time', 'end_time','stop_time','timer_state','team']
-    
-  def create(self, validated_data):
-        return super().create(validated_data)
+    subject   = serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all())
+    task      = serializers.PrimaryKeyRelatedField(queryset=Task.objects.all())
+    languages = serializers.PrimaryKeyRelatedField(
+        queryset=Language.objects.all(),
+        many=True,
+        required=False,     # 未指定(PATCHで触らない)を許容
+        allow_empty=True    # 空配列での「全解除」も許容
+    )
+    team = serializers.PrimaryKeyRelatedField(
+        queryset=Team.objects.all(),
+        allow_null=True,
+        required=False
+    )
+
+    class Meta:
+        model  = Record
+        fields = [
+            'subject', 'task', 'languages',
+            'date', 'description', 'duration',
+            'start_time', 'end_time', 'stop_time',
+            'timer_state', 'team'
+        ]
+
+    def create(self, validated_data):
+        langs = validated_data.pop('languages', [])
+        record = Record.objects.create(**validated_data)
+        if langs is not None:   # 空配列なら全解除、未指定(None)は起きない想定
+            record.languages.set(langs)
+        return record
+
+    def update(self, instance, validated_data):
+        langs = validated_data.pop('languages', None)  # ← None なら「変更しない」
+        for attr, val in validated_data.items():
+            setattr(instance, attr, val)
+        instance.save()
+        if langs is not None:   # 明示指定があれば置き換え。空配列なら全解除
+            instance.languages.set(langs)
+        return instance
+
     
     
 # メルアド重複を500エラーではなく400エラーで出すためのシリアライザ

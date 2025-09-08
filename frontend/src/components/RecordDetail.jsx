@@ -4,6 +4,7 @@ import { api } from "../api";
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 import { toast } from 'react-toastify';
+import LanguageBubblePicker from './LanguageBubblePicker';
 
 const RecordDetail = ({cf,rec,token,teams}) => {
   const [isLoading, setLoading] = useState(false);
@@ -19,7 +20,10 @@ const RecordDetail = ({cf,rec,token,teams}) => {
   const [formData, setFormData] = useState({
     subject:    rec.subject.id,
     task:       rec.task.id,
-    language:   rec.language.id,
+    // 旧: rec.language.id → 新: 配列
+    languages:  Array.isArray(rec.languages)
+                  ? rec.languages.map(l => l.id)
+                  : (rec.language ? [rec.language.id] : []),
     duration:      Math.round(rec.duration/1000/60),
     // ↑分にしてる
     date:       rec.date,
@@ -203,18 +207,18 @@ const RecordDetail = ({cf,rec,token,teams}) => {
             </select>
           </div>
           <div className="col-md">
-            <label className="form-label" htmlFor="language">言語</label>
-            {errors.language && (
+            <label className="form-label">言語（複数選択可）</label>
+            {errors.languages && (
               <div className="text-danger mt-1">
-                {errors.language.map((msg, i) => (
-                  <div key={i}>{msg}</div>
-                ))}
-            </div>)}
-            <select  className='form-control ' name='language' value={formData.language} onChange={handleChange} disabled={!isEditing}>
-              {languages.map((task)=>(
-                <option key={task.id} value={task.id}>{task.name}</option>
-              ))}
-            </select>
+                {errors.languages.map((msg, i) => <div key={i}>{msg}</div>)}
+              </div>
+            )}
+            <LanguageBubblePicker
+              languages={languages}                 // GET /languages/ の結果
+              value={formData.languages}            // 配列のID
+              onChange={(ids) => setFormData(prev => ({ ...prev, languages: ids }))}
+              disabled={!isEditing}
+            />
           </div>
         </div>
 

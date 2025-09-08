@@ -28,7 +28,7 @@ const RecordsList = ({token}) => {
       // 個人 or チーム API エンドポイントを切替
       const path = currentTeamId
         ? `/records/?team=${currentTeamId}`
-        : '/records/';
+        : '/records/?mine=true';
       try{
         const data=await api(path,{
           method: 'GET',
@@ -86,7 +86,14 @@ const RecordsList = ({token}) => {
               <thead className="table-light"><tr><th>日時</th>{currentTeamId?<th>ユーザー</th>:<th>チーム</th>}<th>科目</th><th>課題</th><th>時間</th><th>詳細・編集・削除</th></tr></thead>
               <tbody id="recordsBody">
                 {isLoading?<tr><td colSpan={6}><Skeleton width="100%"/></td></tr>:records.length==0?(<tr><td colSpan={6} className="text-center text-muted py-4">データがありません</td></tr>):(
-                  records.map((record)=>(
+                  records
+                  .slice() // 破壊しないコピー
+                  .sort((a, b) =>
+                    // sortはabを取り出し比較する返り値が+なら入れ替える、-なら入れ替えない(data.parseはミリ秒にしてる)
+                    Date.parse( b.date) -
+                    Date.parse(a.date)
+                  )
+                  .map((record)=>(
                     <tr key={record.id}>
                       <td>{record.date}</td>
                       {currentTeamId?<td>{record.user.username}</td>:<td>{teams.find(team=>team.id===record.team)?.name?? '個人'}</td>}

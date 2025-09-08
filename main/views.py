@@ -97,6 +97,15 @@ class RecordViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user       = self.request.user
         team_param = self.request.query_params.get('team')
+        mine_param = self.request.query_params.get('mine', '').lower() in ('1','true','yes','y')
+
+        # mine=true → 自分が作成したレコードのみ（個人＋所属チーム）
+        if mine_param:
+            qs = Record.objects.filter(user=user)
+            # チーム在籍中のもの or 個人だけに限定（漏洩防止で membership を噛ませる）
+            qs = qs.filter(Q(team__isnull=True) | Q(team__memberships__user=user))
+
+            return qs.distinct()
 
         # 1) team=null → 個人レコードだけ
         if team_param is not None and str(team_param).lower() == 'null':
@@ -116,6 +125,47 @@ class RecordViewSet(viewsets.ModelViewSet):
             Q(user=user,            team__isnull=True)  | 
             Q(team__memberships__user=user)
         ).distinct()
+        
+    @action(detail=False, methods=['get'], url_path='recent_languages')
+    def recent_languages(self, request):
+        """
+        クエリ: subject, task, limit
+        対象ユーザーが同一 subject×task で最近使った言語IDを新しい順で返す。
+        """
+        user_id   = request.user.id
+        subject   = request.query_params.get('subject')
+        task      = request.query_params.get('task')
+        limit     = int(request.query_params.get('limit', 3))
+
+        if not subject or not task:
+            return Response({"detail": "subject と task は必須です。"}, status=400)
+
+        qs = (Record.objects
+            .filter(user_id=user_id, subject_id=subject, task_id=task)
+            .exclude(languages=None)
+            .order_by('-end_time', '-start_time', '-date')[:50])  # 安全バッファ
+
+        # 直近使用の言語（重複除去を保持するため、順序付きで集約）
+        seen = set()
+        recent_ids = []
+        for rec in qs:
+            # rec.languages.all() の順序はM2M上保証しないので、単純列挙でOK
+            for lang in rec.languages.values_list('id', flat=True):
+                if lang not in seen:
+                    seen.add(lang)
+                    recent_ids.append(str(lang))
+                    if len(recent_ids) >= limit:
+                        break
+            if len(recent_ids) >= limit:
+                break
+
+        # ID と name を返却したい場合
+        langs = list(Language.objects.filter(id__in=recent_ids).values('id','name'))
+        # recent_ids の順序に並び替え
+        id_pos = {str(i): p for p, i in enumerate(recent_ids)}
+        langs.sort(key=lambda x: id_pos[str(x['id'])])
+
+        return Response(langs, status=200)
 
     def get_serializer_class(self):
         if self.action in ['create','update','partial_update']:

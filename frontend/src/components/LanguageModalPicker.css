@@ -1,0 +1,36 @@
+/* src/components/LanguageModalPicker.css */
+.lmp { width: 100%; }
+.lmp-bar { display:flex; gap:.75rem; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+.lmp-chips { display:flex; gap:.5rem; flex-wrap:wrap; }
+.lmp-chip { background:#F3F4F6; border:1px solid #E5E7EB; border-radius:999px; padding:.2rem .6rem; font-size:.85rem; color:#374151; }
+
+.lmp-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.35); display:grid; place-items:center; z-index:1050; }
+.lmp-modal { width:min(92vw, 720px); max-height:85vh; background:#fff; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.2); display:flex; flex-direction:column; }
+.lmp-modal-head { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid #eee; }
+.lmp-grid { padding:12px; display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:.5rem; overflow:auto; }
+.lmp-modal-foot { display:flex; align-items:center; gap:.5rem; padding:12px 16px; border-top:1px solid #eee; }
+.flex-spacer { flex:1 1 auto; }
+
+.lmp-bubble { display:flex; align-items:center; gap:.5rem; width:100%; padding:.55rem .8rem; border:1.5px solid #D1D5DB; border-radius:999px; background:#fff; }
+.lmp-bubble:hover { border-color:#9CA3AF; background:#F9FAFB; }
+.lmp-bubble.is-selected { background:#EEF2FF; border-color:#6366F1; }
+.lmp-dot {
+  --size: 18px;
+  width: var(--size); height: var(--size);
+  border-radius: 999px;
+  border: 1.5px solid #D1D5DB;
+  display: inline-flex;                 /* ← 中央寄せ */
+  align-items: center; justify-content: center;
+  flex: 0 0 var(--size);
+  line-height: 1;                       /* ← 行高の影響を切る */
+  background: #fff;
+  color: #4F46E5;
+}
+.lmp-bubble.is-selected .lmp-dot { border-color: #6366F1; }
+.lmp-dot .bi {
+  display: block;                       /* ← baselineを無効化 */
+  font-size: 0.9rem;
+  line-height: 1;
+  transform: translateY(-0.5px);        /* 0〜1pxで微調整（環境差吸収） */
+}
+.lmp-label { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

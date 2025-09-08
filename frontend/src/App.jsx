@@ -1,9 +1,7 @@
-// signupのテンプレの戻るボタンとサクセスの通知消す
-// 統計チームのほかの人引っ張ってきている(個人はその人の作成の奴、チームはそのやつ)あと統計日付順で
 // 言語複数選択、言語履歴呼び出し
 // ログイン後前の奴にリンクさせてブロックしているのなら
 // 招待での取得時emailは除外してもいいかも
-// pw忘れ対応、グーグルソーシャル赤餅でも(いずれもmyp後)
+// pw忘れ対応、グーグルソーシャル赤餅でも、バックのhtmlアイコン出ない(いずれもmyp後)
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, Route, Routes, useNavigate, useParams, useLocation } from 'react-router-dom';
 

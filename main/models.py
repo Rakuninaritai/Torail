@@ -131,7 +131,12 @@ class Record(models.Model):
   user = models.ForeignKey(User, on_delete=models.CASCADE)
   subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
   task = models.ForeignKey(Task, on_delete=models.CASCADE)
-  language = models.ForeignKey(Language, on_delete=models.CASCADE,blank=True, null=True)
+  languages = models.ManyToManyField(
+        Language,
+        blank=True,
+        related_name='records',
+        help_text='複数言語を記録できるようにした'
+    )
   # いつ記録したか
   date = models.DateField(auto_now_add=True)
   # 何をしたかのメモ(省略可)
@@ -297,3 +302,5 @@ class Integration(models.Model):
     @access_token.setter
     def access_token(self, value: str | None):
         self._access_token = _fernet_primary().encrypt(value.encode()) if value else None
+# docker compose exec backend python manage.py makemigrations
+# docker compose exec backend python manage.py migrate

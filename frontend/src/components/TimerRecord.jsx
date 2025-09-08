@@ -5,6 +5,7 @@ import { api } from "../api";
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 import { toast } from 'react-toastify';
+import LanguageBubblePicker from './LanguageBubblePicker';
 
 // タイマー終了後記録を保存するコンポーネント(確定させる?)
 const TimerRecord = ({token,record,settimerchange}) => {
@@ -15,7 +16,7 @@ const TimerRecord = ({token,record,settimerchange}) => {
   const API_BASE = import.meta.env.VITE_API_BASE_URL
   // formdata(送るデータ)のusestate
   const [formData,setFormData]=useState({
-    language:"",
+    languages:[],
     description:"",
   })
   // 選択肢のある奴のusestate
@@ -30,6 +31,15 @@ const TimerRecord = ({token,record,settimerchange}) => {
           method: 'GET',
         })
         setLanguages(data)
+        // 直近言語（同一 subject×task）
+        // record.subject.id / record.task.id は RecordReadSerializer でネスト済み
+        const recent = await api(
+          `/records/recent_languages/?subject=${record.subject.id}&task=${record.task.id}&limit=3`,
+          { method: 'GET' }
+        );
+        // recent は [{id,name},...] 形式で返す設計
+        const defaultIds = (recent || []).map(r => r.id);
+        setFormData(prev => ({ ...prev, languages: defaultIds }));
         setLoading(false)
       }catch (err) {
         // console.error(err);
@@ -42,9 +52,15 @@ const TimerRecord = ({token,record,settimerchange}) => {
     
   },[])
   // 値が変わったら更新する
-  const handleChange=(e)=>{
-    setFormData({...formData,[e.target.name]:e.target.value})
-  }
+  const handleChange = (e) => {
+    const { name, value, multiple, selectedOptions } = e.target;
+    if (multiple) {
+      const values = Array.from(selectedOptions).map(o => o.value);
+      setFormData(prev => ({ ...prev, [name]: values }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+  };
   // 送信ボタン押されたら
   const handleSubmit=async(e)=>{
     setLoading(true)
@@ -98,19 +114,11 @@ const TimerRecord = ({token,record,settimerchange}) => {
                 <div key={i}>{msg}</div>
               ))}
             </div>)}
-          <label htmlFor="language" className="form-label">言語</label>
-          {errors.language && (
-          <div className="text-danger mt-1">
-            {errors.language.map((msg, i) => (
-              <div key={i}>{msg}</div>
-            ))}
-        </div>)}
-          <select  className='form-control mb-3' name='language' value={formData.language} onChange={handleChange} required>
-            <option value="">選択してください</option>
-            {languages.map((lang)=>(
-                <option key={lang.id} value={lang.id}>{lang.name}</option>
-              ))}
-          </select>
+          <LanguageBubblePicker
+              languages={languages}
+              value={formData.languages}
+              onChange={(ids) => setFormData(prev => ({ ...prev, languages: ids }))}
+            />
           <label htmlFor="description" className="form-label">メモ</label>
           {errors.description && (
           <div className="text-danger mt-1">
