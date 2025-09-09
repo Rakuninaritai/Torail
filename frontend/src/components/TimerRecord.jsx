@@ -25,6 +25,7 @@ const TimerRecord = ({token,record,settimerchange}) => {
   useEffect(()=>{
     // 言語
     const shutoku = async ()=>{
+      const ac = new AbortController();  
       setLoading(true)
       try{
         const data=await api('/languages/',{
@@ -33,12 +34,11 @@ const TimerRecord = ({token,record,settimerchange}) => {
         setLanguages(data)
         // 直近言語（同一 subject×task）
         // record.subject.id / record.task.id は RecordReadSerializer でネスト済み
-        const recent = await api(
-          `/records/recent_languages/?subject=${record.subject.id}&task=${record.task.id}&limit=3`,
-          { method: 'GET' }
+        const prev = await api(
+          `/records/recent_languages/?subject=${record.subject.id}&task=${record.task.id}&record=${record.id}`,
+          { method: 'GET', signal: ac.signal }
         );
-        // recent は [{id,name},...] 形式で返す設計
-        const defaultIds = (recent || []).map(r => r.id);
+        const defaultIds = (prev || []).map(l => l.id);
         setFormData(prev => ({ ...prev, languages: defaultIds }));
         setLoading(false)
       }catch (err) {

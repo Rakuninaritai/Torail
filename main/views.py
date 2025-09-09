@@ -14,6 +14,8 @@ from dj_rest_auth.views import LogoutView
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken,TokenError
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models.functions import Coalesce, Cast
+from django.db.models import DateTimeField
 # viewsではどのでーたをどうやって取得、保存、更新、削除できるか決める
 
 # Userに対して
@@ -129,42 +131,48 @@ class RecordViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='recent_languages')
     def recent_languages(self, request):
         """
-        クエリ: subject, task, limit
-        対象ユーザーが同一 subject×task で最近使った言語IDを新しい順で返す。
+        クエリ:
+          - subject (必須)
+          - task    (必須)
+          - record  (任意) このレコード“より前”を基準にする（編集中の自分を除外するために推奨）
+          - before  (任意, ISO文字列) これより前を基準にする
+        戻り値:
+          直前レコードの languages を [{id, name}, ...] で返す。無ければ []
         """
-        user_id   = request.user.id
-        subject   = request.query_params.get('subject')
-        task      = request.query_params.get('task')
-        limit     = int(request.query_params.get('limit', 3))
+        user = request.user
+        subject = request.query_params.get('subject')
+        task    = request.query_params.get('task')
+        rec_id  = request.query_params.get('record')
+        before  = request.query_params.get('before')
 
         if not subject or not task:
             return Response({"detail": "subject と task は必須です。"}, status=400)
 
-        qs = (Record.objects
-            .filter(user_id=user_id, subject_id=subject, task_id=task)
-            .exclude(languages=None)
-            .order_by('-end_time', '-start_time', '-date')[:50])  # 安全バッファ
+        # “時間ソートの基準”を作る: end_time → start_time → date の順で使う
+        base = (Record.objects
+                .filter(user=user, subject_id=subject, task_id=task, timer_state=2)
+                .annotate(sort_key=Coalesce('end_time','start_time', Cast('date', DateTimeField())))
+                .order_by('-sort_key'))
 
-        # 直近使用の言語（重複除去を保持するため、順序付きで集約）
-        seen = set()
-        recent_ids = []
-        for rec in qs:
-            # rec.languages.all() の順序はM2M上保証しないので、単純列挙でOK
-            for lang in rec.languages.values_list('id', flat=True):
-                if lang not in seen:
-                    seen.add(lang)
-                    recent_ids.append(str(lang))
-                    if len(recent_ids) >= limit:
-                        break
-            if len(recent_ids) >= limit:
-                break
+        # どこから“前”かの基準を決める
+        if rec_id:
+            try:
+                cur = (Record.objects
+                       .filter(pk=rec_id, user=user)
+                       .annotate(sort_key=Coalesce('end_time','start_time', Cast('date', DateTimeField())))
+                       .get())
+                base = base.filter(sort_key__lt=cur.sort_key)
+            except Record.DoesNotExist:
+                pass
+        elif before:
+            base = base.filter(sort_key__lt=before)
 
-        # ID と name を返却したい場合
-        langs = list(Language.objects.filter(id__in=recent_ids).values('id','name'))
-        # recent_ids の順序に並び替え
-        id_pos = {str(i): p for p, i in enumerate(recent_ids)}
-        langs.sort(key=lambda x: id_pos[str(x['id'])])
+        # 直前1件
+        prev_rec = base.prefetch_related('languages').first()
+        if not prev_rec:
+            return Response([], status=200)
 
+        langs = list(prev_rec.languages.values('id', 'name'))
         return Response(langs, status=200)
 
     def get_serializer_class(self):

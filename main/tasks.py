@@ -27,6 +27,18 @@ def _fmt_time(t):
     if isinstance(t, _dt.datetime):
         t = timezone.localtime(t)
     return t.strftime("%H:%M")
+# ---------- 1) 追加: 言語整形ヘルパ ----------
+def _fmt_langs(rec: Record) -> str:
+    """
+    Record.languages の名前を '、' 区切りで返す。無ければ '-'
+    """
+    try:
+        names = list(rec.languages.values_list('name', flat=True))
+    except Exception:
+        # 念のためフォールバック
+        names = [getattr(l, 'name', '') for l in getattr(rec, 'languages', [])]
+    names = [n for n in names if n]
+    return "、".join(names) if names else "-"
 
 def _fmt_minutes(duration):
     if duration is None:
@@ -61,6 +73,7 @@ def _ascii_table_for_slack(rec: Record) -> str:
         ("ユーザー",   rec.user.username),
         ("教科",       rec.subject.name),
         ("課題",       rec.task.name),
+        ("言語",       _fmt_langs(rec)),
         ("開始",       _fmt_time(rec.start_time)),
         ("終了",       _fmt_time(rec.end_time)),
         ("合計(分)",   _fmt_minutes(rec.duration)),
@@ -127,6 +140,7 @@ def send_record_notification(record_id: str) -> None:
     record = (
         Record.objects
         .select_related("user", "subject", "task", "team")
+        .prefetch_related("languages") 
         .filter(pk=record_id, timer_state=2)
         .first()
     )
@@ -149,6 +163,7 @@ def send_record_notification(record_id: str) -> None:
         "rows": [
             ("教科",  record.subject.name),
             ("課題",  record.task.name),
+            ("言語",  _fmt_langs(record)), 
             ("開始",  _fmt_time(record.start_time)),
             ("終了",  _fmt_time(record.end_time)),
             ("合計",  dur_txt),
@@ -179,6 +194,7 @@ def notify_slack_team(record_id: str) -> bool:
     rec = (
         Record.objects
         .select_related("user", "subject", "task", "team")
+        .prefetch_related("languages")  
         .filter(pk=record_id, timer_state=2)
         .first()
     )
@@ -189,7 +205,7 @@ def notify_slack_team(record_id: str) -> bool:
     if not (integ and integ.access_token and integ.channel_id):
         return False
 
-    text = _ascii_table_for_slack(rec)
+    lang_txt = _fmt_langs(rec)
     client = WebClient(token=integ.access_token)
     client.chat_postMessage(
         channel=integ.channel_id,
@@ -205,6 +221,10 @@ def notify_slack_team(record_id: str) -> bool:
             {"type": "mrkdwn", "text": f"*開始*\n{_fmt_time(rec.start_time)}"},
             {"type": "mrkdwn", "text": f"*終了*\n{_fmt_time(rec.end_time)}"},
         ]},
+        # 言語は別セクションで1行表示（フィールドに混ぜると列ズレしがち）
+        *([{"type": "section", "text": {"type": "mrkdwn",
+            "text": f"*言語*\n{lang_txt}"}}] if lang_txt != "-" else []),
+
         # description がある場合だけ別セクションで表示
        *([{"type": "section", "text": {"type": "mrkdwn",
            "text": f"*内容*\n{rec.description}"}}] if rec.description else []),
@@ -229,6 +249,7 @@ def _discord_embed_for_record(rec: Record) -> dict:
     """
     title = f"【Torail】{rec.user.username} さんがタイマーを完了しました（チーム: {rec.team.name}）"
     url = f"{settings.FRONTEND_URL.rstrip('/')}/records/{rec.id}"
+    lang_txt = _fmt_langs(rec)
 
     # 可変長は description に寄せる（太字ラベルで読みやすく）
     desc_lines = [
@@ -239,6 +260,8 @@ def _discord_embed_for_record(rec: Record) -> dict:
     if rec.description:
         # 説明は長いので最後に（Discord上限: 4096）
         desc_lines.append(f"**内容**: {rec.description}")
+    if lang_txt != "-":
+        desc_lines.append(f"**言語**: {lang_txt}") 
 
     fields = [
         # 2個1組で inline にする（モバイル2列に揃う）

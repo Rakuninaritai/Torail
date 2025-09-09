@@ -1,7 +1,8 @@
-// 言語複数選択、言語履歴呼び出し
+
 // ログイン後前の奴にリンクさせてブロックしているのなら
-// 招待での取得時emailは除外してもいいかも
+// 招待での取得時emailは除外してもいいかも統計のチームでも飛んでるかも
 // pw忘れ対応、グーグルソーシャル赤餅でも、バックのhtmlアイコン出ない(いずれもmyp後)
+// 自動バックアップ&開発環境
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, Route, Routes, useNavigate, useParams, useLocation } from 'react-router-dom';
 
