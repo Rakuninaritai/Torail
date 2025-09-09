@@ -3,8 +3,11 @@ import { useTeam } from '../context/TeamContext'
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 import { toast } from 'react-toastify';
+import { useLocation } from 'react-router-dom';
 
 const LoginForm = ({onLoginSuccess,settoken,hc}) => {
+  const location = useLocation();
+  const next = new URLSearchParams(location.search).get('next');
   const [isLoading, setLoading] = useState(false);
   // Vite のケース
   const API_BASE = import.meta.env.VITE_API_BASE_URL
@@ -76,7 +79,9 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
             type="button"
             className="btn btn-outline-secondary"
             onClick={() => {
-              window.location.href = `${BACKEND_BASE}/accounts/google/login/?process=login`;
+               const here = `${window.location.origin}${location.pathname}${location.search}${location.hash}`;
+               const nextParam = encodeURIComponent(next || here);
+               window.location.href = `${BACKEND_BASE}/accounts/google/login/?process=login&next=${nextParam}`;
             }}
           >
             <i className="bi bi-google me-1"></i> Googleで続行

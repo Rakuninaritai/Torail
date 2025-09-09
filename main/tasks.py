@@ -40,13 +40,15 @@ def _fmt_langs(rec: Record) -> str:
     names = [n for n in names if n]
     return "、".join(names) if names else "-"
 
-def _fmt_minutes(duration):
-    if duration is None:
-        return "-"
-    # 1万超えはミリ秒想定、それ以外は分
-    minutes = duration / 60_000 if duration > 10_000 else duration
-    # 少数なら1桁
-    return f"{minutes:.1f}" if isinstance(minutes, float) else f"{minutes}"
+def _minutes(ms) -> float:
+    try:
+        return 0.0 if not ms or ms <= 0 else ms / 60000.0
+    except Exception:
+        return 0.0
+
+def _fmt_minutes(ms) -> str:
+    # 表示用（小数1桁）
+    return f"{_minutes(ms):.1f}"
 def _email_recipients(rec: Record) -> list[str]:
 
     """
@@ -76,7 +78,7 @@ def _ascii_table_for_slack(rec: Record) -> str:
         ("言語",       _fmt_langs(rec)),
         ("開始",       _fmt_time(rec.start_time)),
         ("終了",       _fmt_time(rec.end_time)),
-        ("合計(分)",   _fmt_minutes(rec.duration)),
+        ("合計(分)",   f"{_fmt_minutes(rec.duration)} 分"),
     ]
     key_w = max(len(k) for k, _ in rows)
     val_w = max(len(str(v)) for _, v in rows)
@@ -166,7 +168,7 @@ def send_record_notification(record_id: str) -> None:
             ("言語",  _fmt_langs(record)), 
             ("開始",  _fmt_time(record.start_time)),
             ("終了",  _fmt_time(record.end_time)),
-            ("合計",  dur_txt),
+            ("合計",  f"{_fmt_minutes(record.duration)} 分"),
         ],
     }
 
@@ -268,7 +270,7 @@ def _discord_embed_for_record(rec: Record) -> dict:
         {"name": "開始",     "value": _fmt_time(rec.start_time),  "inline": True},
         {"name": "終了",     "value": _fmt_time(rec.end_time),    "inline": True},
         # 合計は1行で見せる（段ズレ防止）
-        {"name": "合計(分)", "value": _fmt_minutes(rec.duration), "inline": False},
+        {"name": "合計(分)", "value": f"{_fmt_minutes(rec.duration)}", "inline": False},
     ]
 
     return {
@@ -291,6 +293,7 @@ def notify_discord_team(record_id: str) -> bool:
     rec = (
         Record.objects
         .select_related("user", "subject", "task", "team")
+        .prefetch_related("languages")  
         .filter(pk=record_id, timer_state=2)
         .first()
     )

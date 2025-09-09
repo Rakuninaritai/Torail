@@ -30,30 +30,7 @@
 
             <!-- データ表 -->
             <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:collapse;font-size:14px;">
-              <!-- 言語だけ先に（チップ風） -->
-              <tr>
-                <th align="left" style="padding:8px 0;border-bottom:1px solid #e1e4e8;width:120px;color:#57606a;">
-                  言語
-                </th>
-                <td style="padding:8px 0;border-bottom:1px solid #e1e4e8;">
-                  {% if languages and languages|length %}
-                    {% for name in languages %}
-                      <span style="
-                        display:inline-block;
-                        margin:2px 6px 2px 0;
-                        padding:4px 10px;
-                        border-radius:999px;
-                        background:#eef2ff;
-                        color:#3730a3;
-                        font-size:12px;
-                        line-height:1;
-                      ">{{ name }}</span>
-                    {% endfor %}
-                  {% else %}
-                    未選択
-                  {% endif %}
-                </td>
-              </tr>
+              
               {% for label, val in rows %}
               <tr>
                 <th align="left"

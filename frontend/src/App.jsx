@@ -1,7 +1,7 @@
-
-// ログイン後前の奴にリンクさせてブロックしているのなら
+// ソーシャルで確認とサインアップも対応
 // 招待での取得時emailは除外してもいいかも統計のチームでも飛んでるかも
 // pw忘れ対応、グーグルソーシャル赤餅でも、バックのhtmlアイコン出ない(いずれもmyp後)
+// 教科課題名義変更??
 // 自動バックアップ&開発環境
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, Route, Routes, useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -20,7 +20,8 @@ import Records from './pages/Records';
 import Login_Register from "./pages/Login_Register";
 import Settings from "./pages/Settings";
 import SlackCallback from "./pages/SlackCallback";
-
+import { Navigate } from 'react-router-dom';
+const currentFullPath = `${location.pathname}${location.search}${location.hash}`;
 import RecordDetail from "./components/RecordDetail";
 
 import { api } from "./api";
@@ -120,22 +121,22 @@ function App() {
     navigate('/');
     setToken(null);
   };
-  const handleLoginSuccess = () => {
-    setLogin(!Login);
-    navigate('/');
+ const handleLoginSuccess = () => {
+    setLogin(v => !v); // これで auth/user 再取得が走る
   };
   // ソーシャルログインが完了するとフロントにurl付きで送ってくるからそれを判断してトースト出してurl消す
   useEffect(() => {
   const url = new URL(window.location.href);
   if (url.searchParams.get('login') === 'ok') {
     toast.success('ログインに成功しました!');
+    // その後クエリをきれいにする
     url.searchParams.delete('login');
+    url.searchParams.delete('next');
     window.history.replaceState({}, '', url.pathname + (url.search ? '?' + url.search : '') + url.hash);
   }
-}, []);
+}, [navigate]);
   useEffect(() => {
     setLoading(true);
-    setTimeout(() => {
       api('auth/user/')
         .then(data => setToken(data))
         .catch((err) => {
@@ -143,8 +144,17 @@ function App() {
           setErrors(err);
         })
         .finally(() => setLoading(false));
-    }, 1000);
   }, [Login]);
+  // Token が入ったら、login_register にいた場合は next へ飛ばす
+  useEffect(() => {
+    if (!Token) return;
+    if (location.pathname === '/login_register') {
+      const params = new URLSearchParams(location.search);
+      const next = params.get('next');
+      navigate(next || '/', { replace: true });
+    }
+  }, [Token, location.pathname, location.search, navigate]);
+
 
   // 個人なら "/" or "/suffix"
   // チーム選択中なら "/<teamName-encoded>" or "/<teamName-encoded>/suffix"
@@ -342,17 +352,23 @@ function App() {
           {/* 個人 AddRecords / Records */}
           <Route
             path="/addrecords"
-            element={Token ? <AddRecords token={Token} onRecordAdded={refreshRecords} updateFlag={updateFlag} /> : <Login_Register onLoginSuccess={handleLoginSuccess} settoken={setToken} />}
+            element={Token ? <AddRecords token={Token} onRecordAdded={refreshRecords} updateFlag={updateFlag} /> :  (isLoading
+         ? null 
+         : <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />)}
           />
           <Route
             path="/records"
-            element={Token ? <Records token={Token} koushin={refreshRecords} /> : <Login_Register onLoginSuccess={handleLoginSuccess} settoken={setToken} />}
+            element={Token ? <Records token={Token} koushin={refreshRecords} /> :  (isLoading
+         ? null 
+         : <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />)}
           />
 
           {/* 個人 Settings */}
           <Route
             path="/settings"
-            element={Token ? <Settings /> : <Login_Register onLoginSuccess={handleLoginSuccess} settoken={setToken} />}
+            element={Token ? <Settings /> : (isLoading
+         ? null 
+         : <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />)}
           />
 
           {/* チーム Home */}
@@ -362,7 +378,9 @@ function App() {
               <TeamRouteBinder>
                 <Home token={Token} />
               </TeamRouteBinder>
-            ) : <Login_Register onLoginSuccess={handleLoginSuccess} settoken={setToken} />}
+            ) :  (isLoading
+         ? null 
+         : <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />)}
           />
 
           {/* チーム AddRecords / Records */}
@@ -372,7 +390,9 @@ function App() {
               <TeamRouteBinder>
                 <AddRecords token={Token} onRecordAdded={refreshRecords} updateFlag={updateFlag} />
               </TeamRouteBinder>
-            ) : <Login_Register onLoginSuccess={handleLoginSuccess} settoken={setToken} />}
+            ) :  (isLoading
+         ? null 
+         : <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />)}
           />
           <Route
             path="/:teamSlug/records"
@@ -380,7 +400,9 @@ function App() {
               <TeamRouteBinder>
                 <Records token={Token} koushin={refreshRecords} />
               </TeamRouteBinder>
-            ) : <Login_Register onLoginSuccess={handleLoginSuccess} settoken={setToken} />}
+            ) :  (isLoading
+         ? null 
+         : <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />)}
           />
 
           {/* チーム Settings */}
@@ -390,13 +412,17 @@ function App() {
               <TeamRouteBinder>
                 <Settings />
               </TeamRouteBinder>
-            ) : <Login_Register onLoginSuccess={handleLoginSuccess} settoken={setToken} />}
+            ) : (isLoading
+         ? null 
+         : <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />)}
           />
 
           {/* レコード詳細（共通） */}
           <Route
             path="/records/:recordId"
-            element={Token ? <RecordDetailPage token={Token} /> : <Login_Register onLoginSuccess={handleLoginSuccess} settoken={setToken} />}
+            element={Token ? <RecordDetailPage token={Token} /> :  (isLoading
+         ? null 
+         : <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />)}
           />
 
           {/* 既存 */}
