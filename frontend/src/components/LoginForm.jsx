@@ -79,9 +79,14 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
             type="button"
             className="btn btn-outline-secondary"
             onClick={() => {
-               const here = `${window.location.origin}${location.pathname}${location.search}${location.hash}`;
-               const nextParam = encodeURIComponent(next || here);
-               window.location.href = `${BACKEND_BASE}/accounts/google/login/?process=login&next=${nextParam}`;
+              // フロントで今いるページ（相対パス）を next にする（絶対URLにしないのがポイント）
+              const currentRelative = `${location.pathname}${location.search}${location.hash}`;
+              const frontendNext = next || currentRelative; // 既に ?next= があればそれを優先
+              // バックの allauth には「まず JWT 中継へ寄る」URLを next として渡す
+              const relay = `/api/auth/social/jwt/?next=${encodeURIComponent(frontendNext)}`;
+              // 最終的に: callback -> （必ず）/api/auth/social/jwt -> フロント next へ
+              window.location.href =
+                `${BACKEND_BASE}/accounts/google/login/?process=login&next=${encodeURIComponent(relay)}`;
             }}
           >
             <i className="bi bi-google me-1"></i> Googleで続行
