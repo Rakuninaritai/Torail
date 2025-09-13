@@ -289,6 +289,9 @@ else:
     SESSION_COOKIE_SAMESITE = 'Lax'
 
 FERNET_KEY = os.environ["FERNET_KEY"]
+CORS_ALLOWED_ORIGINS = [
+    "https://torail.app",
+]
 # # ----- Discord OAuth -----
 DISCORD_CLIENT_ID        = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET    = os.getenv("DISCORD_CLIENT_SECRET")
