@@ -1,160 +1,182 @@
+# main/views.py
 from rest_framework import viewsets, permissions
-from rest_framework.permissions import IsAuthenticated
-from django.db import models
-from django.db.models import Q
-from django.conf import settings
-from django.shortcuts import get_object_or_404
-from .models import User, Subject, Task, Record, Language,Team, TeamMembership, TeamInvitation,Integration
-from .serializers import UserSerializer, SubjectSerializer, TaskSerializer, RecordWriteSerializer,RecordReadSerializer, LanguageSerializer,TeamSerializer, TeamMembershipSerializer,TeamInvitationSerializer#IntegrationSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
-from dj_rest_auth.views import LogoutView
-from rest_framework_simplejwt.views import TokenRefreshView
-from rest_framework_simplejwt.tokens import RefreshToken,TokenError
-from django_filters.rest_framework import DjangoFilterBackend
+from django.shortcuts import get_object_or_404
+from django.db.models import Q
 from django.db.models.functions import Coalesce, Cast
 from django.db.models import DateTimeField
-# viewsではどのでーたをどうやって取得、保存、更新、削除できるか決める
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from django.contrib.auth.views import LogoutView
+from django.conf import settings
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
-# Userに対して
-# modelviewsetを使うと取得更新保存削除などのAPIエンドポイントを自動作成してくれる
+from .models import (
+    User, Team, Subject, Task, Record, TeamMembership, TeamInvitation, Integration,
+    LanguageMaster, UserProfile, UserSNS, PortfolioItem,
+    JobRole, TechArea, ProductDomain,
+    Company, CompanyMember, CompanyPlan, CompanyHiring,
+    MessageTemplate, DMThread, DMMessage
+)
+from .serializers import (
+    UserSerializer, SubjectSerializer, TaskSerializer, RecordReadSerializer, RecordWriteSerializer,
+    TeamSerializer, TeamMembershipSerializer, TeamInvitationSerializer,
+    LanguageMasterSerializer, UserProfileSerializer, UserProfileWriteSerializer, UserSNSSerializer, PortfolioItemSerializer,
+    JobRoleSerializer, TechAreaSerializer, ProductDomainSerializer,
+    CompanySerializer, CompanyMemberSerializer, CompanyPlanSerializer, CompanyHiringSerializer,
+    MessageTemplateSerializer, DMThreadSerializer, DMMessageSerializer
+)
+
+# ==== 既存 User ====
 class UserViewSet(viewsets.ModelViewSet):
-  # 土のデータに対して行うか
-  queryset=User.objects.all()
-  # どのシリアライザーを使うか(何を使ってjsonにするか)
-  serializer_class=UserSerializer
-  # 認証(ユーザーがログイン)していないと使えないように
-  permission_classes=[IsAuthenticated]
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes=[IsAuthenticated]
 
+
+# ==== マスター（全て閲覧は AllowAny でOK） ====
+class LanguageMasterViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = LanguageMaster.objects.filter(is_active=True).order_by('-popularity','name')
+    serializer_class = LanguageMasterSerializer
+    permission_classes=[AllowAny]
+    def get_queryset(self):
+        qs = super().get_queryset()
+        q = self.request.query_params.get('q')
+        if q:
+            qs = qs.filter(Q(name__icontains=q) | Q(slug__icontains=q) | Q(aliases__icontains=q))
+        return qs
+
+class JobRoleViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = JobRole.objects.all().order_by('name')
+    serializer_class = JobRoleSerializer
+    permission_classes=[AllowAny]
+
+class TechAreaViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = TechArea.objects.all().order_by('name')
+    serializer_class = TechAreaSerializer
+    permission_classes=[AllowAny]
+
+class ProductDomainViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = ProductDomain.objects.all().order_by('name')
+    serializer_class = ProductDomainSerializer
+    permission_classes=[AllowAny]
+
+
+# ==== 公開プロフィール ====
+from rest_framework.views import APIView
+class PublicProfileView(APIView):
+    """
+    未ログインでも閲覧OK。個人情報は profile 経由で制御。
+    GET /api/public/users/<uuid>/profile/
+    """
+    permission_classes = [AllowAny]
+    def get(self, request, user_id):
+        user = get_object_or_404(User, pk=user_id)
+        prof = getattr(user, 'profile', None)
+        if not prof or not prof.is_public:
+            return Response({'detail':'not public'}, status=404)
+        return Response(UserProfileSerializer(prof).data)
+
+
+# ==== 自分のプロフィール編集 ====
+class MyProfileView(APIView):
+    permission_classes=[IsAuthenticated]
+    def get(self, request):
+        prof, _ = UserProfile.objects.get_or_create(user=request.user)
+        return Response(UserProfileSerializer(prof).data)
+
+    def patch(self, request):
+        prof, _ = UserProfile.objects.get_or_create(user=request.user)
+        ser = UserProfileWriteSerializer(prof, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        prof = ser.save()
+        return Response(UserProfileSerializer(prof).data)
+
+
+# SNS / PF の簡易CRUD（本人のみ）
+class UserSNSViewSet(viewsets.ModelViewSet):
+    serializer_class = UserSNSSerializer
+    permission_classes=[IsAuthenticated]
+    def get_queryset(self):
+        return UserSNS.objects.filter(user=self.request.user).order_by('-created_at')
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class PortfolioItemViewSet(viewsets.ModelViewSet):
+    serializer_class = PortfolioItemSerializer
+    permission_classes=[IsAuthenticated]
+    def get_queryset(self):
+        return PortfolioItem.objects.filter(user=self.request.user).order_by('-created_at')
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+# ==== Subject/Task/Record（既存ロジックを利用） ====
 class BaseSharedViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
-    # ここでは filter_backends / filterset_fields は指定しない
-
     def get_shared_queryset(self, model_cls):
         user       = self.request.user
         team_param = self.request.query_params.get('team')
-         # team=null → 個人レコードのみ
         if team_param is not None and str(team_param).lower() == 'null':
             return model_cls.objects.filter(user=user, team__isnull=True)
-
-        # 2) team=all
         if team_param == 'all':
-            return model_cls.objects.filter(
-                Q(user=user, team__isnull=True) |
-                Q(team__memberships__user=user)
-            ).distinct()
-            
-        # 1) team=<数字>
-        if team_param :
-            team = get_object_or_404(
-                Team,
-                id=team_param,
-                memberships__user=user
-            )
+            return model_cls.objects.filter(Q(user=user, team__isnull=True)|Q(team__memberships__user=user)).distinct()
+        if team_param:
+            team = get_object_or_404(Team, id=team_param, memberships__user=user)
             return model_cls.objects.filter(team=team)
-
-        
-
-        # 3) パラメータなし（= 個人デフォルト）
         return model_cls.objects.filter(user=user, team__isnull=True)
-
 
 class SubjectViewSet(BaseSharedViewSet):
     serializer_class = SubjectSerializer
-    def get_queryset(self):
-        return self.get_shared_queryset(Subject)
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
+    def get_queryset(self): return self.get_shared_queryset(Subject)
+    def perform_create(self, serializer): serializer.save(user=self.request.user)
 
 class TaskViewSet(BaseSharedViewSet):
     serializer_class = TaskSerializer
-    def get_queryset(self):
-        return self.get_shared_queryset(Task)
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+    def get_queryset(self): return self.get_shared_queryset(Task)
+    def perform_create(self, serializer): serializer.save(user=self.request.user)
 
 class IsTeamMember(permissions.BasePermission):
-    """
-    チーム関連オブジェクト（Team, Record.team!=None）へのアクセス制御
-    チームの人でないとはいらせない
-    - チームのオーナー or membership に含まれるユーザーのみ許可
-    """
     def has_object_permission(self, request, view, obj):
-        # チームオブジェクトなら owner or membership に含まれるか
-        if isinstance(obj, Team):
-            return  obj.memberships.filter(user=request.user).exists()
-        # レコードオブジェクトで team が設定済みなら同様にチェック
-        if isinstance(obj, Record) and obj.team:
-            team = obj.team
-            return team.memberships.filter(user=request.user).exists()
-        # 個人レコード（team=None）は IsAuthenticated で OK
+        from .models import Record as _Record, Team as _Team
+        if isinstance(obj, _Team):
+            return obj.memberships.filter(user=request.user).exists()
+        if isinstance(obj, _Record) and obj.team:
+            return obj.team.memberships.filter(user=request.user).exists()
         return True
-      
-class RecordViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated, IsTeamMember]
 
+class RecordViewSet(viewsets.ModelViewSet):
+    permission_classes=[IsAuthenticated, IsTeamMember]
     def get_queryset(self):
         user       = self.request.user
         team_param = self.request.query_params.get('team')
-        mine_param = self.request.query_params.get('mine', '').lower() in ('1','true','yes','y')
-
-        # mine=true → 自分が作成したレコードのみ（個人＋所属チーム）
-        if mine_param:
-            qs = Record.objects.filter(user=user)
-            # チーム在籍中のもの or 個人だけに限定（漏洩防止で membership を噛ませる）
-            qs = qs.filter(Q(team__isnull=True) | Q(team__memberships__user=user))
-
+        mine       = self.request.query_params.get('mine','').lower() in ('1','true','yes','y')
+        if mine:
+            qs = Record.objects.filter(user=user).filter(Q(team__isnull=True)|Q(team__memberships__user=user))
             return qs.distinct()
-
-        # 1) team=null → 個人レコードだけ
         if team_param is not None and str(team_param).lower() == 'null':
             return Record.objects.filter(user=user, team__isnull=True)
-
-        # 2) team=<UUID> → 特定チームのレコードのみ
         if team_param:
-            team = get_object_or_404(
-                Team,
-                id=team_param,
-                memberships__user=user
-            )
+            team = get_object_or_404(Team, id=team_param, memberships__user=user)
             return Record.objects.filter(team=team)
+        return Record.objects.filter(Q(user=user, team__isnull=True)|Q(team__memberships__user=user)).distinct()
 
-        # 2) それ以外（パラメータなし／team=all相当）はすべて取得
-        return Record.objects.filter(
-            Q(user=user,            team__isnull=True)  | 
-            Q(team__memberships__user=user)
-        ).distinct()
-        
     @action(detail=False, methods=['get'], url_path='recent_languages')
     def recent_languages(self, request):
-        """
-        クエリ:
-          - subject (必須)
-          - task    (必須)
-          - record  (任意) このレコード“より前”を基準にする（編集中の自分を除外するために推奨）
-          - before  (任意, ISO文字列) これより前を基準にする
-        戻り値:
-          直前レコードの languages を [{id, name}, ...] で返す。無ければ []
-        """
         user = request.user
         subject = request.query_params.get('subject')
         task    = request.query_params.get('task')
         rec_id  = request.query_params.get('record')
         before  = request.query_params.get('before')
-
         if not subject or not task:
-            return Response({"detail": "subject と task は必須です。"}, status=400)
-
-        # “時間ソートの基準”を作る: end_time → start_time → date の順で使う
+            return Response({"detail":"subject と task は必須です。"}, status=400)
         base = (Record.objects
                 .filter(user=user, subject_id=subject, task_id=task, timer_state=2)
                 .annotate(sort_key=Coalesce('end_time','start_time', Cast('date', DateTimeField())))
                 .order_by('-sort_key'))
-
-        # どこから“前”かの基準を決める
         if rec_id:
             try:
                 cur = (Record.objects
@@ -166,83 +188,133 @@ class RecordViewSet(viewsets.ModelViewSet):
                 pass
         elif before:
             base = base.filter(sort_key__lt=before)
-
-        # 直前1件
         prev_rec = base.prefetch_related('languages').first()
-        if not prev_rec:
-            return Response([], status=200)
-
-        langs = list(prev_rec.languages.values('id', 'name'))
+        if not prev_rec: return Response([], status=200)
+        langs = list(prev_rec.languages.values('id','name','slug'))
         return Response(langs, status=200)
 
     def get_serializer_class(self):
-        if self.action in ['create','update','partial_update']:
-            return RecordWriteSerializer
-        return RecordReadSerializer
+        return RecordWriteSerializer if self.action in ['create','update','partial_update'] else RecordReadSerializer
+    def perform_create(self, serializer): serializer.save(user=self.request.user)
+
+
+# ==== Company & Member & Plan & Hiring ====
+class IsCompanyMember(permissions.BasePermission):
+    """
+    company 関連は company.members に含まれているかで制御
+    """
+    def has_object_permission(self, request, view, obj):
+        if isinstance(obj, Company):
+            return obj.members.filter(user=request.user).exists()
+        return True
+
+def _require_owner(company: Company, user: User):
+    if not CompanyMember.objects.filter(company=company, user=user, role='owner').exists():
+        raise PermissionDenied("Owner 権限が必要です。")
+
+class CompanyViewSet(viewsets.ModelViewSet):
+    serializer_class = CompanySerializer
+    permission_classes=[IsAuthenticated, IsCompanyMember]
+
+    def get_queryset(self):
+        return Company.objects.filter(members__user=self.request.user).distinct()
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-        
-# Subject
-# class SubjectViewSet(viewsets.ModelViewSet):
-#   queryset=Subject.objects.all()
-#   serializer_class=SubjectSerializer
-#   permission_classes=[IsAuthenticated]
-#   filter_backends = [DjangoFilterBackend]
-#   filterset_fields = {
-#         'team': ['exact', 'isnull'],  # ← isnull を有効に
-#     }
-  
-#   def get_queryset(self):
-#       user    = self.request.user
-#       team_id = self.request.query_params.get('team', None)
+        # 企業登録（オーナー=作成者）
+        company = serializer.save(owner=self.request.user)
+        CompanyMember.objects.create(company=company, user=self.request.user, role='owner')
 
-#       # ─── チーム指定あり ───
-#       if team_id:
-#           # 「team=null」もしくは空文字が来たら個人レコードだけ
-#           if team_id.lower() in ('null', ''):
-#               return Subject.objects.filter(user=user, team__isnull=True)
+class CompanyMemberViewSet(viewsets.ModelViewSet):
+    serializer_class = CompanyMemberSerializer
+    permission_classes=[IsAuthenticated]
+    def get_queryset(self):
+        company_id = self.request.query_params.get('company')
+        qs = CompanyMember.objects.filter(company__members__user=self.request.user)
+        if company_id: qs = qs.filter(company_id=company_id)
+        return qs
+    def perform_create(self, serializer):
+        company = serializer.validated_data['company']
+        _require_owner(company, self.request.user)
+        serializer.save()
+    def perform_destroy(self, instance):
+        _require_owner(instance.company, self.request.user)
+        return super().perform_destroy(instance)
 
-#           # それ以外の team=<id> はそのチームの全レコード
-#           team = get_object_or_404(Team, id=team_id, memberships__user=user)
-#           return Subject.objects.filter(team=team)
+class CompanyPlanViewSet(viewsets.ModelViewSet):
+    serializer_class = CompanyPlanSerializer
+    permission_classes=[IsAuthenticated]
+    def get_queryset(self):
+        return CompanyPlan.objects.filter(company__members__user=self.request.user)
+    def perform_create(self, serializer):
+        company = serializer.validated_data['company']
+        _require_owner(company, self.request.user)
+        serializer.save()
 
-#       # ─── デフォルト／パラメータなし ───
-#       # 個人レコードだけ返す
-#       return Subject.objects.filter(user=user, team__isnull=True)
+class CompanyHiringViewSet(viewsets.ModelViewSet):
+    serializer_class = CompanyHiringSerializer
+    permission_classes=[IsAuthenticated]
+    def get_queryset(self):
+        return CompanyHiring.objects.filter(company__members__user=self.request.user).order_by('-created_at')
+    def perform_create(self, serializer):
+        company = serializer.validated_data['company']
+        if not CompanyMember.objects.filter(company=company, user=self.request.user).exists():
+            raise PermissionDenied("会社メンバーのみ作成できます")
+        serializer.save()
 
-#   def perform_create(self, serializer):
-#       serializer.save(user=self.request.user)
 
-# Task
-# class TaskViewSet(viewsets.ModelViewSet):
-#   queryset=Task.objects.all()
-#   serializer_class=TaskSerializer
-#   permission_classes=[IsAuthenticated]
-#   filter_backends    = [DjangoFilterBackend]
-#   filterset_fields   = {'team': ['exact', 'isnull']}
+# ==== Templates / DM ====
+class MessageTemplateViewSet(viewsets.ModelViewSet):
+    serializer_class = MessageTemplateSerializer
+    permission_classes=[IsAuthenticated]
+    def get_queryset(self):
+        qs = MessageTemplate.objects.filter(
+            Q(owner_user=self.request.user) |
+            Q(owner_company__members__user=self.request.user)
+        ).distinct()
+        owner_company = self.request.query_params.get('company')
+        if owner_company:
+            qs = qs.filter(owner_company_id=owner_company)
+        return qs
+    def perform_create(self, serializer):
+        # company or user のどちらかで作成できる
+        return serializer.save(owner_user=self.request.user) if not serializer.validated_data.get('owner_company') else serializer.save()
 
-#   def get_queryset(self):
-#       user    = self.request.user
-#       team_id = self.request.query_params.get('team', None)
+class DMThreadViewSet(viewsets.ModelViewSet):
+    serializer_class = DMThreadSerializer
+    permission_classes=[IsAuthenticated]
+    def get_queryset(self):
+        # 会社側 or 学生側のどちらも一覧できる（所属/本人のみ）
+        qs = DMThread.objects.filter(
+            Q(company__members__user=self.request.user) | Q(user=self.request.user)
+        ).distinct().order_by('-created_at')
+        company_id = self.request.query_params.get('company')
+        if company_id:
+            qs = qs.filter(company_id=company_id)
+        return qs
+    def perform_create(self, serializer):
+        comp = serializer.validated_data['company']
+        # 会社側のみスレッド作成許可（企業→学生への最初のDM）
+        if not CompanyMember.objects.filter(company=comp, user=self.request.user).exists():
+            raise PermissionDenied("会社メンバーのみ作成できます")
+        serializer.save()
 
-#       if team_id:
-#           if team_id.lower() in ('null', ''):
-#               return Task.objects.filter(user=user, team__isnull=True)
-#           team = get_object_or_404(Team, id=team_id,memberships__user=user)
-#           return Task.objects.filter(team=team)
-
-#       return Task.objects.filter(user=user, team__isnull=True)
-
-#   def perform_create(self, serializer):
-#       serializer.save(user=self.request.user)
-
-# Language
-class LanguageViewSet(viewsets.ModelViewSet):
-  queryset = Language.objects.all()
-  serializer_class = LanguageSerializer
-  permission_classes = [IsAuthenticated]
-
+class DMMessageViewSet(viewsets.ModelViewSet):
+    serializer_class = DMMessageSerializer
+    permission_classes=[IsAuthenticated]
+    def get_queryset(self):
+        return DMMessage.objects.filter(
+            Q(thread__company__members__user=self.request.user) | Q(thread__user=self.request.user)
+        ).distinct().order_by('created_at')
+    def perform_create(self, serializer):
+        thread = serializer.validated_data['thread']
+        # 送信者権限チェック
+        if CompanyMember.objects.filter(company=thread.company, user=self.request.user).exists():
+            sender = 'company'
+        elif thread.user == self.request.user:
+            sender = 'user'
+        else:
+            raise PermissionDenied("このスレッドに投稿できません")
+        serializer.save(sender=sender)
 
 
 
@@ -429,6 +501,14 @@ class TeamInvitationViewSet(viewsets.ModelViewSet):
         # 承認時に membership レコードを作成
         TeamMembership.objects.create(team=inv.team, user=request.user)
         return Response({'status': 'joined'})
+class PublicProfileByNameView(APIView):
+    permission_classes = [AllowAny]
+    def get(self, request, username):
+        user = get_object_or_404(User, username=username)
+        prof = getattr(user, 'profile', None)
+        if not prof or not prof.is_public:
+            return Response({'detail':'not public'}, status=404)
+        return Response(UserProfileSerializer(prof).data)
 
 # # backend/main/views.py など
 # def build_discord_oauth_url(team_id: str) -> str:

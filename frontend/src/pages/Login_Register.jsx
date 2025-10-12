@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import LoginForm from '../components/LoginForm'
-import RegisterForm from '../components/RegisterForm'
+import LoginForm from '../components/Login_Register/LoginForm'
+import RegisterForm from '../components/Login_Register/RegisterForm'
 
 const Login_Register = ({onLoginSuccess,settoken}) => {
   document.title="Torail|ログイン/会員登録"

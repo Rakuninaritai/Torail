@@ -1,0 +1,57 @@
+:root { --torail-border:#e5e7eb; }
+.torail-card{ background:#fff; border:1px solid var(--torail-border); border-radius:1rem; box-shadow:0 6px 24px rgba(0,0,0,.04); padding:1rem; }
+.subtle{ color:#6b7280; }
+.avatar{ width:72px; height:72px; border-radius:50%; object-fit:cover; background:#eef2ff; display:block; }
+.avatar-edit-btn{ position:absolute; right:-6px; bottom:-6px; border-radius:999px; width:32px; height:32px; }
+.sns-btn{ width:36px; height:36px; border:1px solid var(--torail-border); border-radius:999px; display:inline-flex; align-items:center; justify-content:center; background:#fff; }
+
+.pill { background:#F3F4F6; border:1px solid #E5E7EB; border-radius:999px; padding:.25rem .6rem; font-size:.85rem; color:#374151; }
+
+.kpi-row{ display:flex; flex-wrap:wrap; gap:1rem; }
+.kpi{ background:#f9fafb; border:1px solid #e5e7eb; border-radius:.75rem; padding:.6rem .8rem; min-width:160px; }
+.kpi .label{ font-size:.85rem; color:#6b7280; } 
+.kpi .value{ font:700 1.25rem/1.2 system-ui; }
+.kpi .bar{ height:6px; background:#e5e7eb; border-radius:999px; overflow:hidden; }
+.kpi .bar>span{ display:block; height:100%; background:#60a5fa; }
+
+.heatmap{ display:grid; grid-template-columns:repeat(30, 9px); gap:4px; }
+.heatmap .cell{ width:9px; height:9px; border-radius:2px; background:#e5e7eb; }
+.heatmap .on-1{ background:#cfe8ff; } .heatmap .on-2{ background:#9fd0ff; } .heatmap .on-3{ background:#69b5ff; } .heatmap .on-4{ background:#339bff; }
+
+.portfolio-card{ border:1px solid var(--torail-border); border-radius:.75rem; padding:1rem; background:#fff; }
+
+@media (min-width:1200px){
+  .three-col{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; }
+}
+/* --- 汎用ダイアログ（SNS追加で使用） --- */
+.dlg-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:grid; place-items:center; z-index:1050; }
+.dlg-card{ width:min(92vw,640px); max-height:85vh; background:#fff; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.2); display:flex; flex-direction:column; }
+.dlg-head{ display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid #eee; }
+.dlg-body{ padding:12px 16px; overflow:auto; }
+.dlg-foot{ display:flex; justify-content:flex-end; gap:.5rem; padding:12px 16px; border-top:1px solid #eee; }
+/* SNS ボタン + 削除重ね */
+.sns-wrap{ position:relative; }
+.sns-del{
+  position:absolute; top:-8px; right:-8px;
+  width:22px; height:22px; border-radius:999px;
+  display:inline-flex; align-items:center; justify-content:center;
+  border:1px solid var(--torail-border); background:#fff;
+  box-shadow:0 2px 6px rgba(0,0,0,.08);
+  line-height:1; font-size:.75rem;
+}
+.sns-del:hover{ background:#fee2e2; border-color:#fecaca; }
+
+/* ポートフォリオ削除（カード右上） */
+.card-del{
+  position:absolute; top:6px; right:6px;
+  width:28px; height:28px; border-radius:999px;
+  display:inline-flex; align-items:center; justify-content:center;
+  border:1px solid var(--torail-border); background:#fff;
+  box-shadow:0 2px 6px rgba(0,0,0,.08);
+}
+.card-del:hover{ background:#fee2e2; border-color:#fecaca; }
+/* user-cards.css 末尾に追加 */
+.torail-card, .portfolio-card, .subtle, .text-body, .pill {
+  overflow-wrap: anywhere; /* 長いURLや単語を安全に折り返し */
+}
+

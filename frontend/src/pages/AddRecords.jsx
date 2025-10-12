@@ -1,8 +1,8 @@
 import React, { useEffect, useState} from 'react'
-import AddRecordForm from '../components/AddRecordForm'
-import AddSubjectForm from '../components/AddSubjectForm'
-import AddTaskForm from '../components/AddTaskForm'
-import TimerContorl from '../components/TimerContorl'
+import AddRecordForm from '../components/AddRecords/AddRecordForm'
+import AddSubjectForm from '../components/AddRecords/AddSubjectForm'
+import AddTaskForm from '../components/AddRecords/AddTaskForm'
+import TimerContorl from '../components/AddRecords/TimerContorl'
 import { api } from "../api";
 import { useTeam } from '../context/TeamContext';
 import Skeleton from 'react-loading-skeleton';

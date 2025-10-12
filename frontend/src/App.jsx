@@ -1,16 +1,14 @@
-// ソーシャルで確認とサインアップも対応
-// 招待での取得時emailは除外してもいいかも統計のチームでも飛んでるかも
+// 招待での取得時emailは除外してもいいかも統計のチームでも飛んでるかも、メール飛ばない(SMTPやめる??railwayでのアプデでらしい)
 // pw忘れ対応、グーグルソーシャル赤餅でも、バックのhtmlアイコン出ない(いずれもmyp後)
 // 教科課題名義変更??
 // 自動バックアップ&開発環境
+// チーム名アルファベットで
+// codexコードデバック
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, Route, Routes, useNavigate, useParams, useLocation } from 'react-router-dom';
 
-import RecordsList from "./components/RecordsList";
+
 import { TeamProvider, useTeam } from './context/TeamContext';
-import AddRecordForm from './components/AddRecordForm';
-import RegistrationForm from './components/RegistrationForm';
-import LoginForm from './components/LoginForm';
 import LogoutBtn from './components/LogoutBtn';
 import CreateTeamModal from './components/CreateTeamModal';
 
@@ -21,8 +19,7 @@ import Login_Register from "./pages/Login_Register";
 import Settings from "./pages/Settings";
 import SlackCallback from "./pages/SlackCallback";
 import { Navigate } from 'react-router-dom';
-const currentFullPath = `${location.pathname}${location.search}${location.hash}`;
-import RecordDetail from "./components/RecordDetail";
+import RecordDetail from "./components/Records/RecordDetail";
 
 import { api } from "./api";
 import logo from "../src/assets/TorailLOGO.png"
@@ -32,6 +29,12 @@ import 'react-loading-skeleton/dist/skeleton.css';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import NotFound from './pages/NotFound';
+import CompanyDashboard from './pages/Company/CompanyDashboard';
+import CompanySettingsPage from './pages/Company/CompanySettings';
+import Scout from './pages/Company/Scout';
+import UserPage from './pages/UserPage';
+import ScoutBoxPage from './pages/ScoutBox';
+
 
 /* =========================
    Helpers: Bind teamSlug ↔ context, Detail page
@@ -428,6 +431,11 @@ function App() {
           {/* 既存 */}
           <Route path="/login_register" element={<Login_Register onLoginSuccess={handleLoginSuccess} settoken={setToken} />} />
           <Route path="/slack/callback" element={<SlackCallback />} />
+          <Route path='/company/dashboard' element={<CompanyDashboard/>}/>
+          <Route path='/company/scout' element={<Scout initialUser="山本 舟人"/>}/>
+          <Route path='/company/settings' element={<CompanySettingsPage isAdmin={true} />}/>
+          <Route path="/mypage/:username" element={<UserPage token={Token} />} />
+          <Route path='/scoutbox' element={<ScoutBoxPage/>} />
           {/* 404ページ常にルート最下層で */}
           <Route path='*' element={<NotFound/>} />
         </Routes>

@@ -1,12 +1,12 @@
 
-import Settings_User from '../components/Settings_User';
-import Settings_Subject_Task from '../components/Settings_Subject_Task';
+import Settings_User from '../components/Settings/Settings_User';
+import Settings_Subject_Task from '../components/Settings/Settings_Subject_Task';
 import { useTeam } from '../context/TeamContext';
-import Settings_Team from '../components/Settings_Team';
-import Invition_Team from '../components/Invition_Team';
-import Invited_Team from '../components/Invited_Team';
+import Settings_Team from '../components/Settings/Settings_Team';
+import Invition_Team from '../components/Settings/Invition_Team';
+import Invited_Team from '../components/Settings/Invited_Team';
 import { useState } from 'react';
-import Leave_Team from '../components/Leave_Team';
+import Leave_Team from '../components/Settings/Leave_Team';
 // import TeamIntegrations from '../components/TeamIntegrations';
 
 const Settings = () => {

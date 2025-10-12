@@ -1,0 +1,23 @@
+:root { --torail-bg:#f6f8fa; --torail-card:#fff; --torail-border:#e5e7eb; }
+.torail-card{ background:#fff; border:1px solid var(--torail-border); border-radius:1rem; box-shadow:0 6px 24px rgba(0,0,0,.04); padding:1rem; }
+.page-header{ display:flex; align-items:center; gap:.75rem; }
+.title{ font-weight:700; letter-spacing:.2px; }
+.subtle{ color:#6b7280; }
+.avatar{ width:40px; height:40px; border-radius:50%; background:#eef2ff; display:inline-block; }
+.candidate-card{ transition: transform .05s ease; }
+.candidate-card:hover{ transform: translateY(-2px); }
+
+.saved-search-pill{ border:1px dashed var(--torail-border); padding:.375rem .5rem; border-radius:.5rem; background:#fff; }
+
+.lstack{ display:flex; gap:.5rem; flex-wrap:wrap; }
+.chip-btn{ background:#F3F4F6; border:1px solid #E5E7EB; border-radius:999px; padding:.3rem .7rem; font-size:.85rem; color:#374151; }
+.chip-btn.is-on{ background:#EEF2FF; border-color:#6366F1; color:#1f2937; }
+
+.heatmap{ display:grid; grid-template-columns:repeat(30,10px); gap:4px; }
+.heatmap .cell{ width:10px; height:10px; border-radius:2px; background:#e5e7eb; }
+.heatmap .cell.on-1{ background:#cfe8ff; }
+.heatmap .cell.on-2{ background:#9fd0ff; }
+.heatmap .cell.on-3{ background:#69b5ff; }
+.heatmap .cell.on-4{ background:#339bff; }
+
+.empty{ color:#9ca3af; text-align:center; padding:2.5rem 1rem; }

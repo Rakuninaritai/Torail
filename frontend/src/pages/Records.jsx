@@ -1,5 +1,5 @@
 import React from 'react'
-import RecordsList from '../components/RecordsList'
+import RecordsList from '../components/Records/RecordsList'
 
 const Records = ({token,koushin }) => {
   document.title="Torail|統計"

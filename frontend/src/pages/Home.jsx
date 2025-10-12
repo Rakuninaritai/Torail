@@ -2,7 +2,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useTeam } from "../context/TeamContext";
-import TeamHome from "../components/Team_Home";
+import TeamHome from "../components/Home/Team_Home";
 import { NavLink } from 'react-router-dom';
 
 /* 
