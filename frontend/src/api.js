@@ -12,16 +12,22 @@ function hasRefreshToken() {
     .split(';')
     .some(c => c.trim().startsWith('refresh_token='));
 }
-
+function getCSRFCookie() {
+  const m = document.cookie.split('; ').find(r => r.startsWith('csrftoken='))
+  return m ? decodeURIComponent(m.split('=')[1]) : ''
+}
 export async function api(path, options = {}) {
   const cleanPath = path.replace(/^\/+/, '');
   const url = `${API_BASE}/${cleanPath}`;
 
+  const method = (options.method || 'GET').toUpperCase()
+  const needsCSRF = !['GET', 'HEAD', 'OPTIONS'].includes(method)
   // Cookie を必ず送る
   const config = {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...(needsCSRF ? { 'X-CSRFToken': getCSRFCookie() } : {}),
       ...(options.headers || {}),
     },
     ...options,

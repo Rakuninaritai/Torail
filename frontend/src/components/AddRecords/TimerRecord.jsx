@@ -34,12 +34,22 @@ const TimerRecord = ({token,record,settimerchange}) => {
         setLanguages(data)
         // 直近言語（同一 subject×task）
         // record.subject.id / record.task.id は RecordReadSerializer でネスト済み
-        const prev = await api(
-          `/records/recent_languages/?subject=${record.subject.id}&task=${record.task.id}&record=${record.id}`,
-          { method: 'GET', signal: ac.signal }
-        );
-        const defaultIds = (prev || []).map(l => l.id);
-        setFormData(prev => ({ ...prev, languages: defaultIds }));
+        // const prev = await api(
+        //   `/records/recent_languages/?subject=${record.subject.id}&task=${record.task.id}&record=${record.id}`,
+        //   { method: 'GET', signal: ac.signal }
+        // );
+        // const defaultIds = (prev || []).map(l => l.id);
+        // setFormData(prev => ({ ...prev, languages: defaultIds }));
+        try {
+         const prev = await api(
+           `/records/recent_languages/?subject=${record?.subject?.id}&task=${record?.task?.id}&record=${record.id}`,
+           { method: 'GET', signal: ac.signal }
+         );
+         const defaultIds = Array.isArray(prev) ? prev.map(l => l.id) : [];
+         setFormData(p => ({ ...p, languages: defaultIds }));
+       } catch {
+         // recent が無くても続行（既定は空）
+       }
         setLoading(false)
       }catch (err) {
         // console.error(err);

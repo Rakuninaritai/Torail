@@ -218,6 +218,12 @@ router.register(r'dm/threads', DMThreadViewSet, basename='dm-threads')
 router.register(r'dm/messages', DMMessageViewSet, basename='dm-messages')
 
 urlpatterns = [
+    # バックからフロントに飛ばすよう
+     path("go/front-home/", to_front_home, name="front_home"),
+    # --- 残りは既存のルーティング ---
+    path('api/auth/',          include('dj_rest_auth.urls')),
+    path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
+    path('api/',               include(router.urls)),
     # Cookie-JWT
     path('api/token/',         CookieTokenObtainPairView.as_view(),  name='token_obtain_pair'),
     path('api/token/refresh/', CookieTokenRefreshView.as_view(),     name='token_refresh'),
@@ -272,4 +278,6 @@ urlpatterns = [
     path("accounts/", include("allauth.urls")),
     path("admin/", admin.site.urls),
 ]
-
+urlpatterns += [ 
+    path("api/auth/social/jwt/", social_jwt_issuer, name="social_jwt_issuer"), 
+]
