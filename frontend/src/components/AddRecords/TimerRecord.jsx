@@ -28,7 +28,7 @@ const TimerRecord = ({token,record,settimerchange}) => {
       const ac = new AbortController();  
       setLoading(true)
       try{
-        const data=await api('/languages/',{
+        const data=await api('/master/languages/',{
           method: 'GET',
         })
         setLanguages(data)

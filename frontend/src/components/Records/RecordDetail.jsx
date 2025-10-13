@@ -85,7 +85,7 @@ const RecordDetail = ({cf,rec,token,teams}) => {
               st.some(task => task.subject === subject.id)
             );
             setSubjects(subjectsWithTasks)
-            const sl=await api('/languages/',{
+            const sl=await api('/master/languages/',{
               method: 'GET',
             })
             setLanguages(sl)

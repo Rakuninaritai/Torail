@@ -120,11 +120,11 @@ export default function RecordsGraph({ records = [] }) {
         labels,
         datasets: [{
           data,
-          // 落ち着いた単一色相（青系）、明度だけ変化
           backgroundColor: labels.map((_, i) => {
-            const L = 72 - (32 * i / Math.max(1, labels.length - 1));
-            return `hsl(210 60% ${Math.max(40, L)}%)`;
-          })
+          // HSLの色相を均等にずらしてカラフルに
+          const hue = (i * 360 / Math.max(1, labels.length)); // 0〜360を等分
+          return `hsl(${hue} 80% 55%)`; // 彩度高め・明度中間でパキッと
+        })
         }]
       },
       options: {
