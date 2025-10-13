@@ -17,7 +17,7 @@ const Settings_Subject_Task = () => {
     const [subjects,setSubjects]=useState([])
     const [tasks,setTasks]=useState([])
     const [sousin,setSoushin]=useState(false)
-    // 教科
+    // トピック
     const [filteredTasks,setFilteredTasks]=useState([])
     // エラー表示などのmessagestate
     const [errors,setErrors]=useState("")
@@ -64,7 +64,7 @@ const Settings_Subject_Task = () => {
               }
               shutoku()
     },[sousin,currentTeamId])
-    // formdataのsubjectが変わったら課題を更新する
+    // formdataのsubjectが変わったらタスクを更新する
       useEffect(()=>{
         // IDが なければクリア
         if (!formData_Sub.id) {
@@ -72,7 +72,7 @@ const Settings_Subject_Task = () => {
           setFormData_Tsk({ id: "", name: "" });
           return;
         }
-        // 教科に値が入っているなら(id)
+        // トピックに値が入っているなら(id)
         if(formData_Sub.id){
           // formdataはidなので文字を持ちたいのでfilterかけて取得してる
           const Ssname=subjects.find(sub=>sub.id===formData_Sub.id)
@@ -108,7 +108,7 @@ const Settings_Subject_Task = () => {
         }
       },[formData_Sub.id,tasks,sousin])
     useEffect(()=>{
-        // 教科に値が入っているなら(id)
+        // トピックに値が入っているなら(id)
         if(formData_Tsk.id){
           // formdataはidなので文字を持ちたいのでfilterかけて取得してる
           const Ssname=tasks.find(sub=>sub.id===formData_Tsk.id)
@@ -141,13 +141,13 @@ const Settings_Subject_Task = () => {
           method: 'PATCH',
           body:JSON.stringify(recordData),
           })
-          // console.log("教科情報が更新されました",data)
-          toast.success("教科情報が更新されました!")
+          // console.log("トピック情報が更新されました",data)
+          toast.success("トピック情報が更新されました!")
           setLoading(false)
           setSoushin(!sousin)
           }catch(err){
             // console.error(err);
-            toast.error("教科情報の更新に失敗しました。")
+            toast.error("トピック情報の更新に失敗しました。")
             setLoading(false)
             setErrors(err)
           }
@@ -192,13 +192,13 @@ const Settings_Subject_Task = () => {
           method: 'PATCH',
           body:JSON.stringify(recordData),
           })
-          // console.log("課題情報が更新されました",data)
-          toast.success("課題情報が更新されました!")
+          // console.log("タスク情報が更新されました",data)
+          toast.success("タスク情報が更新されました!")
           setLoading(false)
           setSoushin(!sousin)
           }catch(err){
             // console.error(err);
-            toast.error("課題情報更新に失敗しました。")
+            toast.error("タスク情報更新に失敗しました。")
             setLoading(false)
             setErrors(err)
           }
@@ -230,7 +230,7 @@ const Settings_Subject_Task = () => {
       {isLoading?<Skeleton/>:(
         <>
         <form onSubmit={handleSubmit_Sub}>
-          <h2>教科・課題</h2>
+          <h2>トピック・タスク</h2>
           {/* 送信エラー */}
             {errors.detail && (
               <div className="text-danger mt-1">
@@ -244,7 +244,7 @@ const Settings_Subject_Task = () => {
                 <div key={i}>{msg}</div>
               ))}
             </div>)}
-            <label htmlFor="subject" className="form-label">教科</label>
+            <label htmlFor="subject" className="form-label">トピック</label>
             {errors.subject && (
                 <div className="text-danger mt-1">
                   {errors.subject.map((msg, i) => (
@@ -258,7 +258,7 @@ const Settings_Subject_Task = () => {
               <option key={task.id} value={task.id}>{task.name}</option>
             ))}
           </select>
-          <label  htmlFor="name" className="form-label">教科名変更</label>
+          <label  htmlFor="name" className="form-label">トピック名変更</label>
             <input type="text" className='form-control mb-3' name='name' value={formData_Sub.name} onChange={handleChange_Sub} required />
             {errors.name && (
               <div className="text-danger mt-1">
@@ -283,7 +283,7 @@ const Settings_Subject_Task = () => {
         </form>
         <br />
         <form onSubmit={handleSubmit_Tsk}>
-          <label htmlFor="task" className="form-label">課題</label>
+          <label htmlFor="task" className="form-label">タスク</label>
           {errors.task && (
               <div className="text-danger mt-1">
                 {errors.task.map((msg, i) => (

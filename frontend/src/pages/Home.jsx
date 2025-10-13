@@ -64,7 +64,7 @@ const Home = ({ token }) => {
               <i className="bi bi-bar-chart-line display-5 mb-3 text-success"></i>
               <h5 className="card-title fw-semibold">統計ダッシュボード</h5>
               <p className="card-text small">
-                教科別・課題別の作業量をグラフで可視化し、進捗をひと目で確認。
+                トピック別・タスク別の作業量をグラフで可視化し、進捗をひと目で確認。
               </p>
             </div>
           </div>

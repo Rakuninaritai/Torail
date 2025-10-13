@@ -104,8 +104,8 @@ const TimerRecord = ({token,record,settimerchange}) => {
       {isLoading?<Skeleton/>:(
         <>
           <div>
-            <h5>教科 : <span className=''>{record.subject.name}</span></h5>
-            <h5>課題 : {record.task.name}</h5>
+            <h5>トピック : <span className=''>{record.subject.name}</span></h5>
+            <h5>タスク : {record.task.name}</h5>
             <h5>ユーザー : {record.user.username}</h5>
             <SectoMin times={record.duration/1000}/>
           </div>

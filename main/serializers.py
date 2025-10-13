@@ -71,9 +71,9 @@
 #     # 検索で存在していたら
 #     if qs.exists():
 #         if team:
-#             raise serializers.ValidationError({'name': 'このチームには既に同じ教科名があります。'})
+#             raise serializers.ValidationError({'name': 'このチームには既に同じトピック名があります。'})
 #         else:
-#             raise serializers.ValidationError({'name': 'この教科は既に追加されています。'})
+#             raise serializers.ValidationError({'name': 'このトピックは既に追加されています。'})
 
 #     return data
 
@@ -109,9 +109,9 @@
 
 #     if qs.exists():
 #         if team:
-#             raise serializers.ValidationError({'name': 'このチームには既に同じ課題名があります。'})
+#             raise serializers.ValidationError({'name': 'このチームには既に同じタスク名があります。'})
 #         else:
-#             raise serializers.ValidationError({'name': 'この課題は既に追加されています。'})
+#             raise serializers.ValidationError({'name': 'このタスクは既に追加されています。'})
 
 #     return data
 
@@ -373,7 +373,7 @@ class SubjectSerializer(serializers.ModelSerializer):
             qs = Subject.objects.filter(user=user, team__isnull=True, name=name)
         if self.instance: qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
-            raise serializers.ValidationError({'name':'同名の教科が既に存在します'})
+            raise serializers.ValidationError({'name':'同名のトピックが既に存在します'})
         return data
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -392,7 +392,7 @@ class TaskSerializer(serializers.ModelSerializer):
         else:    qs = Task.objects.filter(user=user, team__isnull=True, subject=subject, name=name)
         if self.instance: qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
-            raise serializers.ValidationError({'name':'同名の課題が既に存在します'})
+            raise serializers.ValidationError({'name':'同名のタスクが既に存在します'})
         return data
 
 class RecordReadSerializer(serializers.ModelSerializer):

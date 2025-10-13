@@ -28,7 +28,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
   const [subjects,setSubjects]=useState([])
   const [tasks,setTasks]=useState([])
   // const [languages,setLanguages]=useState([])
-  // 教科
+  // トピック
   const [filteredTasks,setFilteredTasks]=useState([])
 
   // データ取得(第二が[]につきレンダリング時のみ実行)
@@ -72,9 +72,9 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
   const handleChange=(e)=>{
     setFormData({...formData,[e.target.name]:e.target.value})
   }
-  // formdataのsubjectが変わったら課題を更新する
+  // formdataのsubjectが変わったらタスクを更新する
   useEffect(()=>{
-    // 教科に値が入っているなら(id)
+    // トピックに値が入っているなら(id)
     if(formData.subject){
       selectSub(formData.subject)
       const Ssname=subjects.filter(sub=>sub.id===formData.subject)
@@ -137,7 +137,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
                   <div key={i}>{msg}</div>
                 ))}
               </div>)}
-            <label htmlFor="subject" className="form-label">教科</label>
+            <label htmlFor="subject" className="form-label">トピック</label>
             {errors.subject && (
                 <div className="text-danger mt-1">
                   {errors.subject.map((msg, i) => (
@@ -159,10 +159,10 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
               data-bs-toggle="modal"
               data-bs-target="#addSubjectModal"
             >
-              新しい教科を追加
+              新しいトピックを追加
             </button>
             <hr />
-            <label htmlFor="task" className="form-label">課題</label>
+            <label htmlFor="task" className="form-label">タスク</label>
             {errors.task && (
                 <div className="text-danger mt-1">
                   {errors.task.map((msg, i) => (
@@ -183,7 +183,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
               data-bs-toggle="modal"
               data-bs-target="#addTaskModal"
             >
-              新しい課題を追加
+              新しいタスクを追加
             </button>
             <div className="d-flex justify-content-center gap-3 mt-3">
               <button id="startBtn"  type='submit' className="btn btn-primary btn-lg"><i className="bi bi-play-fill"></i></button>
@@ -204,7 +204,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
         <div className="modal-dialog">
           <div className="modal-content">
             <div className="modal-header">
-              <h5 className="modal-title" id="addSubjectModalLabel">教科を追加</h5>
+              <h5 className="modal-title" id="addSubjectModalLabel">トピックを追加</h5>
               <button
                 type="button"
                 className="btn-close"
@@ -232,7 +232,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
         <div className="modal-dialog">
           <div className="modal-content">
             <div className="modal-header">
-              <h5 className="modal-title" id="addTaskModalLabel">課題を追加</h5>
+              <h5 className="modal-title" id="addTaskModalLabel">タスクを追加</h5>
               <button
                 type="button"
                 className="btn-close"

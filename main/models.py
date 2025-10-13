@@ -45,11 +45,11 @@
 #     def __str__(self):
 #         return self.name
       
-# # 教科モデル(内容に対して教科→課題が作成できる)
+# # トピックモデル(内容に対してトピック→タスクが作成できる)
 # class Subject(models.Model):
 #   # idはuuuidで強固かつ主キーに
 #   id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
-#   # nameは教科名
+#   # nameはトピック名
 #   name=models.CharField(max_length=100)
 #   # ユーザーは外部キーで引っ張ってきた
 #   user=models.ForeignKey(User,on_delete=models.CASCADE)
@@ -78,15 +78,15 @@
 #   def __str__(self):
 #      return self.name
    
-# # 課題モデル(どの教科のどの課題かみたいな)
+# # タスクモデル(どのトピックのどのタスクかみたいな)
 # class Task(models.Model):
 #   # idはuuuidで強固かつ主キーに
 #   id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
 #   # ユーザーは外部キーで引っ張ってきた
 #   user=models.ForeignKey(User,on_delete=models.CASCADE)
-#   # どの教科の課題化
+#   # どのトピックのタスク化
 #   subject=models.ForeignKey(Subject,on_delete=models.CASCADE)
-#   # nameは課題名
+#   # nameはタスク名
 #   name=models.CharField(max_length=100)
 #   team = models.ForeignKey(
 #       Team,
@@ -112,7 +112,7 @@
   
 #   def __str__(self):
 #      return self.name
-# # どの言語か(教科や課題に依存しない)
+# # どの言語か(トピックやタスクに依存しない)
 # class Language(models.Model):
 #     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 #     name = models.CharField(max_length=50, unique=True)
@@ -431,7 +431,7 @@ class PortfolioItem(models.Model):
 
 
 # ------------------------------------------------------------
-# 既存の科目/課題/Record（言語だけ LanguageMaster に付け替え）
+# 既存の科目/タスク/Record（言語だけ LanguageMaster に付け替え）
 # ------------------------------------------------------------
 class Subject(models.Model):
     id   = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

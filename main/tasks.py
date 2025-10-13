@@ -73,8 +73,8 @@ def _email_recipients(rec: Record) -> list[str]:
 def _ascii_table_for_slack(rec: Record) -> str:
     rows = [
         ("ユーザー",   rec.user.username),
-        ("教科",       rec.subject.name),
-        ("課題",       rec.task.name),
+        ("トピック",       rec.subject.name),
+        ("タスク",       rec.task.name),
         ("言語",       _fmt_langs(rec)),
         ("開始",       _fmt_time(rec.start_time)),
         ("終了",       _fmt_time(rec.end_time)),
@@ -163,8 +163,8 @@ def send_record_notification(record_id: str) -> None:
         "record": record,
         "frontend_url": settings.FRONTEND_URL,
         "rows": [
-            ("教科",  record.subject.name),
-            ("課題",  record.task.name),
+            ("トピック",  record.subject.name),
+            ("タスク",  record.task.name),
             ("言語",  _fmt_langs(record)), 
             ("開始",  _fmt_time(record.start_time)),
             ("終了",  _fmt_time(record.end_time)),
@@ -217,8 +217,8 @@ def notify_slack_team(record_id: str) -> bool:
          "text": f"*【Torail】{rec.user.username} さんがタイマーを完了しました（チーム: {rec.team.name}）*"}},
         {"type": "section", "fields": [
             {"type": "mrkdwn", "text": f"*ユーザー*\n{rec.user.username}"},
-            {"type": "mrkdwn", "text": f"*教科*\n{rec.subject.name}"},
-            {"type": "mrkdwn", "text": f"*課題*\n{rec.task.name}"},
+            {"type": "mrkdwn", "text": f"*トピック*\n{rec.subject.name}"},
+            {"type": "mrkdwn", "text": f"*タスク*\n{rec.task.name}"},
             {"type": "mrkdwn", "text": f"*合計(分)*\n{_fmt_minutes(rec.duration)}"},
             {"type": "mrkdwn", "text": f"*開始*\n{_fmt_time(rec.start_time)}"},
             {"type": "mrkdwn", "text": f"*終了*\n{_fmt_time(rec.end_time)}"},
@@ -256,8 +256,8 @@ def _discord_embed_for_record(rec: Record) -> dict:
     # 可変長は description に寄せる（太字ラベルで読みやすく）
     desc_lines = [
         f"**ユーザー**: {rec.user.username}",
-        f"**教科**: {rec.subject.name}",
-        f"**課題**: {rec.task.name}",
+        f"**トピック**: {rec.subject.name}",
+        f"**タスク**: {rec.task.name}",
     ]
     if rec.description:
         # 説明は長いので最後に（Discord上限: 4096）

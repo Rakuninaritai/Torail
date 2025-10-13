@@ -55,8 +55,8 @@ const AddTaskForm = ({token,changes,sub,subname}) => {
           method: 'POST',
           body:JSON.stringify(sendData),
         })
-        // console.log("課題が追加されました",data)
-        toast.success("課題が追加されました!")
+        // console.log("タスクが追加されました",data)
+        toast.success("タスクが追加されました!")
         // 例: AddSubjectForm の handleSubmit 内、成功時に…
         const modalEl = document.getElementById('addTaskModal'); // モーダルの <div id="addSubjectModal"> を指す
         // 既にインスタンスがあれば取得、なければ生成
@@ -67,7 +67,7 @@ const AddTaskForm = ({token,changes,sub,subname}) => {
         }catch(err){
             // console.error(err);
             setErrors(err)
-            toast.error("課題の追加に失敗しました。")
+            toast.error("タスクの追加に失敗しました。")
         }
    
 }
@@ -92,7 +92,7 @@ const AddTaskForm = ({token,changes,sub,subname}) => {
             <div key={i}>{msg}</div>
           ))}
       </div>)}
-      <p>課題を追加する教科:{subname}</p>
+      <p>タスクを追加するトピック:{subname}</p>
       {errors.name && (
         <div className="text-danger mt-1">
           {errors.name.map((msg, i) => (
@@ -100,7 +100,7 @@ const AddTaskForm = ({token,changes,sub,subname}) => {
           ))}
       </div>)}
       {isLoading?<Skeleton/>:(<>
-        <input type='text' name='name' placeholder='課題'  className='form-control mb-3' value={formData.name} onChange={handleChange}  />
+        <input type='text' name='name' placeholder='タスク'  className='form-control mb-3' value={formData.name} onChange={handleChange}  />
         <div className="d-flex justify-content-center gap-3 mt-3">
           {subname?(<button type='submit'  className="btn btn-dark btn-lg"   >追加</button>):("")}
         </div>

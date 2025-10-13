@@ -37,20 +37,20 @@ const AddSubjectForm = ({token,changes}) => {
           method: 'POST',
           body:JSON.stringify(sendData),
         })
-        // console.log("教科が追加されました",data)
+        // console.log("トピックが追加されました",data)
         // 例: AddSubjectForm の handleSubmit 内、成功時に…
         const modalEl = document.getElementById('addSubjectModal'); // モーダルの <div id="addSubjectModal"> を指す
         // 既にインスタンスがあれば取得、なければ生成
         const bsModal = window.bootstrap.Modal.getInstance(modalEl) || new window.bootstrap.Modal(modalEl);
         bsModal.hide();
-        toast.success("教科が追加されました!")
+        toast.success("トピックが追加されました!")
         changes()
         setLoading(false)
     }catch(err){
       // console.error(err);
       setErrors(err)
       setLoading(false)
-      toast.error("教科の追加に失敗しました。")
+      toast.error("トピックの追加に失敗しました。")
     }
     
   }
@@ -76,7 +76,7 @@ const AddSubjectForm = ({token,changes}) => {
           ))}
       </div>)}
       {isLoading?(<Skeleton/>):(<>
-        <input type='text' name='name' placeholder='教科' className='form-control mb-3' value={formData.name} onChange={handleChange}  />
+        <input type='text' name='name' placeholder='トピック' className='form-control mb-3' value={formData.name} onChange={handleChange}  />
         <div className="d-flex justify-content-center gap-3 mt-3">
             <button type='submit'  className="btn btn-dark btn-lg"   >追加</button>
         </div>

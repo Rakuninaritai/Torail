@@ -62,7 +62,7 @@ const RecordDetail = ({cf,rec,token,teams}) => {
   const [tasks,setTasks]=useState([])
   const [languages,setLanguages]=useState([])
   const [filteredSubjects,setFilteredSubjects]=useState([])
-  // 教科
+  // トピック
   const [filteredTasks,setFilteredTasks]=useState([])
   // データ取得(第二が[]につきレンダリング時のみ実行)
   useEffect(()=>{
@@ -113,9 +113,9 @@ const RecordDetail = ({cf,rec,token,teams}) => {
       );
     }
   },[formData.team,subjects])
-  // formdataのsubjectが変わったら課題を更新する
+  // formdataのsubjectが変わったらタスクを更新する
   useEffect(()=>{
-    // 教科に値が入っているなら(id)
+    // トピックに値が入っているなら(id)
     if(formData.subject){
       const filtered = tasks.filter(task => task.subject == formData.subject)
       // それらを選択肢とする
@@ -175,7 +175,7 @@ const RecordDetail = ({cf,rec,token,teams}) => {
           ))}
         </div>)}
       <form id="recordForm"  onSubmit={handleSubmit} >
-        {/* 科目・課題・言語 */}
+        {/* 科目・タスク・言語 */}
         <div className="row g-3 mb-3">
           <div className="col-md">
             <label className="form-label" htmlFor="subject">科目</label>
@@ -193,7 +193,7 @@ const RecordDetail = ({cf,rec,token,teams}) => {
             </select>
           </div>
           <div className="col-md">
-            <label className="form-label" htmlFor="task">課題</label>
+            <label className="form-label" htmlFor="task">タスク</label>
             {errors.task && (
               <div className="text-danger mt-1">
                 {errors.task.map((msg, i) => (
