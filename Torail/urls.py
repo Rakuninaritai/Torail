@@ -22,9 +22,9 @@
 # #IntegrationViewSet
 # from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 # from dj_rest_auth.views import UserDetailsView
-# from main import views_slack
-# from main import views_discord as vdisc
-# from main import views_email
+from main import views_slack
+from main import views_discord as vdisc
+from main import views_email
 # from django.conf import settings
 # from django.shortcuts import redirect
 # from rest_framework.decorators import api_view
@@ -51,12 +51,12 @@
 # def to_front_home(request):
 #     return redirect((settings.FRONTEND_URL or "/").rstrip("/") + "/")
 
-# def _cookie_opts(request=None):
-#     # https のときは SameSite=None; Secure 必須（クロスサイトでCookie送るため）
-#     if request is not None and request.is_secure():
-#         return dict(httponly=True, secure=True, samesite='None', path='/')
-#     # ローカル http のとき
-#     return dict(httponly=True, secure=False, samesite='Lax', path='/')
+def _cookie_opts(request=None):
+    # https のときは SameSite=None; Secure 必須（クロスサイトでCookie送るため）
+    if request is not None and request.is_secure():
+        return dict(httponly=True, secure=True, samesite='None', path='/')
+    # ローカル http のとき
+    return dict(httponly=True, secure=False, samesite='Lax', path='/')
 
 # @require_GET
 # def social_jwt_issuer(request):
@@ -236,6 +236,30 @@ urlpatterns = [
 
     # 既存 & 新規のViewSet群
     path('api/', include(router.urls)),
+    # 直打ちで入らせたくないものを“先に”定義（用途に応じて 404 かリダイレクトを選択）
+    path("accounts/login/", _to_front_login, name="account_login"),
+    path("accounts/signup/", _to_front_login, name="account_signup"),
+    path("accounts/password/reset/", _404, name="account_reset_password"),
+    path("accounts/password/change/", _404, name="account_change_password"),
+    path("accounts/email/", _404, name="account_email"),
+    path("accounts/inactive/", _404, name="account_inactive"),
+    # ← new: allauth の公開ルート（/accounts/google/login/ 等）
+    path("accounts/", include("allauth.urls")),
+    # --- Slack integration endpoints ---
+    path("api/integrations/slack/connect/",  views_slack.slack_connect),
+    path("api/integrations/slack/callback/", views_slack.slack_callback),
+    path("api/integrations/slack/channels/", views_slack.list_channels),
+    path("api/integrations/slack/save_channel/", views_slack.save_channel),
+    path("api/integrations/slack/test/", views_slack.send_test),
+    path('api/integrations/slack/status/', views_slack.slack_status),
+    # discord
+    path("api/integrations/discord/status/", vdisc.discord_status),
+    path("api/integrations/discord/channels/", vdisc.discord_channels),
+    path("api/integrations/discord/save_channel/", vdisc.discord_save_channel),
+    path("api/integrations/discord/test/", vdisc.discord_test),
+    path("api/integrations/discord/connect/", vdisc.discord_connect),
+    path("api/integrations/discord/callback/", vdisc.discord_callback),
+    path("api/integrations/email/test/", views_email.email_test),
 
     # フロント誘導/管理/他
     path("go/front-home/", to_front_home, name="front_home"),
