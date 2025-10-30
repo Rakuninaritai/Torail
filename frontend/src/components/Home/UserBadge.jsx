@@ -1,7 +1,7 @@
 // components/UserBadge.jsx
 import React from "react";
 import { Link } from "react-router-dom";
-import "./UserBadge.css";
+import "./Userbadge.css";
 
 export default function UserBadge({
   username = "",
