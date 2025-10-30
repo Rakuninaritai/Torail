@@ -31,7 +31,12 @@ export default function MetricsCard({ kpi, activity30, langBreakdown }) {
     type: "line",
     data: {
       labels: activity30.map((_, i) => i + 1),
-      datasets: [{ data: activity30.map((v) => (v > 0 ? 1 : 0)), tension: 0.25, pointRadius: 0 }],
+      datasets: [{ data: activity30.map((v) => (v > 0 ? 1 : 0)),
+      tension: 0.25,
+      pointRadius: 0,
+      borderColor: "hsl(30 90% 45%)",      // 温かみのあるオレンジ線
+      backgroundColor: "hsla(30 90% 45% / 0.2)", // 面も淡く 
+      }],
     },
     options: { plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 1, ticks: { stepSize: 1 } } } },
   });
@@ -46,9 +51,12 @@ export default function MetricsCard({ kpi, activity30, langBreakdown }) {
       datasets: [{
         data,
         backgroundColor: labels.map((_, i) => {
-          const L = 72 - (32 * i / Math.max(1, labels.length - 1));
-          return `hsl(210 60% ${Math.max(40, L)}%)`;
-        })
+          const hue = (i * 137.5) % 360; // 黄金角で散らす
+          return `hsl(${hue} 90% 55%)`; // 原色寄りでビビッド
+        }),
+          borderColor: "#fff",
+          borderWidth: 2,
+          hoverOffset: 8,
       }]
     },
     options: { plugins: { legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 12 } } } },
@@ -68,25 +76,25 @@ export default function MetricsCard({ kpi, activity30, langBreakdown }) {
           <div className="label">現在ストリーク</div>
           <div className="value"><span>{kpi.streakNow}</span>日</div>
           <div className="bar mt-1"><span style={{ width: `${pct(kpi.streakNow, kpi.goal || 20)}%` }} /></div>
-          <small className="text-muted">目標: {kpi.goal || 20}日</small>
+          {/* <small className="text-muted">目標: {kpi.goal || "-"}日</small> */}
         </div>
         <div className="kpi">
           <div className="label">最長ストリーク</div>
           <div className="value"><span>{kpi.streakMax}</span>日</div>
           <div className="bar mt-1"><span style={{ width: `${pct(kpi.streakMax, kpi.maxBase || 30)}%` }} /></div>
-          <small className="text-muted">直近更新: {kpi.lastUpdate || "—"}</small>
+          {/* <small className="text-muted">直近更新: {kpi.lastUpdate || "—"}</small> */}
         </div>
         <div className="kpi">
           <div className="label">直近7日</div>
           <div className="value"><span>{kpi.active7}</span>日</div>
           <div className="bar mt-1"><span style={{ width: `${pct(kpi.active7, 7)}%` }} /></div>
-          <small className="text-muted">休み: {kpi.offHint || "—"}</small>
+          {/* <small className="text-muted">休み: {kpi.offHint || "—"}</small> */}
         </div>
         <div className="kpi">
           <div className="label">直近30日</div>
           <div className="value"><span>{kpi.active30}</span>日</div>
           <div className="bar mt-1"><span style={{ width: `${pct(kpi.active30, 30)}%` }} /></div>
-          <small className="text-muted">達成率 {pct(kpi.active30, 30)}%</small>
+          {/* <small className="text-muted">達成率 {pct(kpi.active30, 30)}%</small> */}
         </div>
       </div>
 

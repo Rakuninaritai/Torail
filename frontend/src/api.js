@@ -22,16 +22,29 @@ export async function api(path, options = {}) {
 
   const method = (options.method || 'GET').toUpperCase()
   const needsCSRF = !['GET', 'HEAD', 'OPTIONS'].includes(method)
+  const isFormData = (options.body instanceof FormData);
+  const isJSONString = (
+      typeof options.body === 'string' &&
+      !isFormData
+    );
   // Cookie を必ず送る
   const config = {
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      // 'Content-Type': 'application/json',
       ...(needsCSRF ? { 'X-CSRFToken': getCSRFCookie() } : {}),
       ...(options.headers || {}),
     },
     ...options,
   };
+  // FormData のときは Content-Type を消す（ブラウザに任せる）
+  if (isFormData && config.headers['Content-Type']) {
+    delete config.headers['Content-Type'];
+  }
+  // JSON文字列を送るのに Content-Type が無い場合は自動で付与
+  if (isJSONString && !config.headers['Content-Type']) {
+    config.headers['Content-Type'] = 'application/json';
+  }
 
   // ① 本来のリクエスト
   let res = await fetch(url, config);
@@ -50,13 +63,7 @@ export async function api(path, options = {}) {
     });
 
     if (refreshRes.ok) {
-      // 新しいアクセストークンを取得してヘッダーにセット
-      const { access } = await refreshRes.json();
-      config.headers = {
-        ...config.headers,
-        Authorization: `Bearer ${access}`,
-      };
-      // 再リクエスト
+      // Cookie に新しい access が入っただけなので、そのまま再試行（ヘッダー変更不要）
       res = await fetch(url, config);
     } else {
       // リフレッシュ失敗 → 強制ログイン画面へ

@@ -336,3 +336,9 @@ DEFAULT_FROM_EMAIL   = EMAIL_HOST_USER
 # }
 # 通知設定用
 TORAIL_NOTIFY_PRIORITY = os.getenv("TORAIL_NOTIFY_PRIORITY", "slack,email,discord")
+
+MEDIA_URL  = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+REST_AUTH_SERIALIZERS = {
+    "USER_DETAILS_SERIALIZER": "main.serializers.UserSerializer",
+}

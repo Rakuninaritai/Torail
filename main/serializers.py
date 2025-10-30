@@ -316,6 +316,7 @@ class PortfolioItemSerializer(serializers.ModelSerializer):
         fields = ['id','title','stack','url','github','description','created_at']
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
     desired_jobs    = JobRoleSerializer(many=True, read_only=True)
     tech_areas      = TechAreaSerializer(many=True, read_only=True)
     product_domains = ProductDomainSerializer(many=True, read_only=True)
@@ -325,10 +326,16 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model  = UserProfile
         fields = [
-            'id','display_name','school','prefecture','grade','bio','is_public',
+            'id','display_name','school','prefecture','grade','bio','vision','is_public',
             'desired_jobs','tech_areas','product_domains','languages',
-            'sns_links','portfolio_items'
+            'sns_links','portfolio_items','avatar_url'
         ]
+        
+    def get_avatar_url(self, obj):
+       request = self.context.get("request")
+       if obj.avatar and hasattr(obj.avatar, "url"):
+           return request.build_absolute_uri(obj.avatar.url) if request else obj.avatar.url
+       return ""
 
 # PATCH/POST 用（ID配列で受ける）
 class UserProfileWriteSerializer(serializers.ModelSerializer):
@@ -339,7 +346,7 @@ class UserProfileWriteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = UserProfile
-        fields = ['display_name','school','prefecture','grade','bio','is_public','desired_jobs','tech_areas','product_domains','languages']
+        fields = ['display_name','school','prefecture','grade','bio','vision','is_public','desired_jobs','tech_areas','product_domains','languages']
 
     def update(self, instance, validated_data):
         m2m_fields = ['desired_jobs','tech_areas','product_domains','languages']
@@ -452,6 +459,16 @@ class CompanyHiringSerializer(serializers.ModelSerializer):
         fields = ['id','company','title','detail','tech_stack','location','employment_type','created_at']
         read_only_fields = ['created_at']
 
+class CompanyPublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Company
+        fields = ['name','slug','industry','website','description','logo_url']
+
+class CompanyHiringPublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompanyHiring
+        fields = ['title','detail','tech_stack','location','employment_type','created_at']
+
 
 # ------------- Templates / DM -------------
 class MessageTemplateSerializer(serializers.ModelSerializer):
@@ -479,10 +496,19 @@ class CustomRegisterSerializer(RegisterSerializer):
     email = serializers.EmailField(required=True, validators=[
         UniqueValidator(queryset=User.objects.all(), message="このメールアドレスは既に使われています。")
     ])
+    account_type = serializers.ChoiceField(choices=User.ACCOUNT_CHOICES, required=False)
+
     def get_cleaned_data(self):
         data = super().get_cleaned_data()
         data['email'] = self.validated_data.get('email','')
+        data['account_type'] = self.validated_data.get('account_type','student')
         return data
+
+    def save(self, request):
+        user = super().save(request)
+        user.account_type = self.cleaned_data.get('account_type','student')
+        user.save(update_fields=['account_type'])
+        return user
 
 
 # ------------- Team / Invitation（既存） -------------

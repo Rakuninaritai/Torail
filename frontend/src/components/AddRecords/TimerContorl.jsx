@@ -7,6 +7,7 @@ import { useTeam } from '../../context/TeamContext';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 import { toast } from 'react-toastify';
+import MediaPipeMonitor from './MediaPipeMonitor';
 // チーム対応済
 
 // タイマーコンポーネント(計測やストップ)
@@ -217,6 +218,21 @@ const handleFnish=async()=>{
               <h5>ユーザー : {record.user.username}</h5>
               <SectoMin times={time}/>
               <div className="d-flex justify-content-center gap-3 mt-3">
+                <MediaPipeMonitor
+                  enabled={record?.timer_state !== 3} // 保存中(3)は監視不要なのでOFF、それ以外はON
+                  onAway={() => { // 顔不在の自動中断ロジック
+                  if (record?.timer_state === 0) handleSusupend(); // 実行中(0)の時だけ中断APIを叩く
+                  }}
+                  onFist={() => { // グー(Closed_Fist)検出時のトグル
+                  if (record?.timer_state === 0) handleSusupend(); // 実行中なら中断
+                  else if (record?.timer_state === 1) handleContinue(); // 中断中なら再開
+                  }}
+                  awayThresholdMs={10_000} // 顔なし10秒で onAway 発火
+                  gestureCooldownMs={1500} // グー連続検出の誤作動防止(1.5秒)
+                  minFistScore={0.8} // グー認識の信頼度閾値
+                  frameIntervalMs={66} // 推論フレーム間隔（負荷が高ければ 100~150 に）
+                  showPreview={false} // デバッグ時のみ true（プレビュー表示）
+                 />
                 {timerState === "実行中" && (
                     <button id="stopBtn" className="btn btn-secondary btn-lg"  onClick={handleSusupend} >
                       <i className="bi bi-stop-fill"   ></i>

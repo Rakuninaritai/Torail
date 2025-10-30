@@ -7,19 +7,51 @@ export default function HeaderCard({ profile, isOwner, onSave, onAddSns, onRemov
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(profile);
   const [snsOpen, setSnsOpen] = useState(false);
+  const previewUrlRef = useRef(null);
 
   useEffect(() => setDraft(profile), [profile]);
+  const GRADE_OPTIONS = [
+  { value: "",  label: "—" },
+  { value: "1", label: "1年" },
+  { value: "2", label: "2年" },
+  { value: "3", label: "3年" },
+  { value: "4", label: "4年" },
+  { value: "M1", label: "修士1" },
+  { value: "M2", label: "修士2" },
+];
+const gradeLabel = (v) => GRADE_OPTIONS.find(o => o.value === v)?.label || "—";
 
   const pickAvatar = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
     const url = URL.createObjectURL(f);
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlRef.current = url;
     setDraft((d) => ({ ...d, avatarUrl: url, _avatarFile: f }));
   };
 
   const start = () => setEditing(true);
-  const cancel = () => { setDraft(profile); setEditing(false); };
-  const save = () => { onSave?.(draft); setEditing(false); };
+  const cancel = () => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setDraft(profile);
+    setEditing(false);
+  };
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
+  const save = async () => {
+    await onSave?.(draft);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setEditing(false);
+  };
 
   const removeSnsAt = (idx) => { onRemoveSns?.(idx); };
 
@@ -53,10 +85,9 @@ export default function HeaderCard({ profile, isOwner, onSave, onAddSns, onRemov
             <>
               <div className="d-flex align-items-center flex-wrap gap-2">
                 <h5 className="mb-0">{profile.displayName}</h5>
-                <span className="badge text-bg-info">公開：企業のみ</span>
               </div>
               <div className="subtle mt-1">
-                {profile.school} / {profile.grade} / {profile.pref}
+                {profile.school} / {gradeLabel(profile.grade)} / {profile.pref}
               </div>
             </>
           ) : (
@@ -67,6 +98,7 @@ export default function HeaderCard({ profile, isOwner, onSave, onAddSns, onRemov
                   placeholder="ユーザー名"
                   value={draft.displayName}
                   onChange={(e) => setDraft((d) => ({ ...d, displayName: e.target.value }))}
+                  readOnly
                 />
               </div>
               <div className="d-flex gap-2 flex-wrap mt-2">
@@ -81,7 +113,9 @@ export default function HeaderCard({ profile, isOwner, onSave, onAddSns, onRemov
                   value={draft.grade}
                   onChange={(e) => setDraft((d) => ({ ...d, grade: e.target.value }))}
                 >
-                  <option>1年</option><option>2年</option><option>3年</option><option>4年</option>
+                 {GRADE_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
                 </select>
                 <input
                   className="form-control form-control-sm"

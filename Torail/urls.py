@@ -147,6 +147,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from dj_rest_auth.views import UserDetailsView
+from django.conf.urls.static import static
 
 from main.views import (
     # 既存
@@ -158,7 +159,8 @@ from main.views import (
     PublicProfileView, MyProfileView,
     UserSNSViewSet, PortfolioItemViewSet,
     CompanyViewSet, CompanyMemberViewSet, CompanyPlanViewSet, CompanyHiringViewSet,
-    MessageTemplateViewSet, DMThreadViewSet, DMMessageViewSet,PublicProfileByNameView
+    MessageTemplateViewSet, DMThreadViewSet, DMMessageViewSet,PublicProfileByNameView,
+    PublicActivityKPIByNameView,PublicCompanyView,MyDMThreadsSummary,DMThreadDetailView,CompanyMemberInviteView,PatchedUserDetailsView
 )
 
 # ---- 既存と同様の補助関数/ビュー（省略） ----
@@ -179,6 +181,13 @@ def social_jwt_issuer(request):
     if not request.user.is_authenticated:
         return redirect(f"{settings.FRONTEND_URL.rstrip('/')}/login?error=social_auth_failed")
     refresh = RefreshToken.for_user(request.user)
+    # 企業フローならアカウント種別を company に（学生なら company / both の設計は要件に合わせて）
+    role = request.GET.get("role")
+    if role == "company":
+        u = request.user
+        if u.account_type != "company":
+            u.account_type = "company"
+            u.save(update_fields=["account_type"])
     next_path = request.GET.get("next","/")
     if not next_path.startswith("/"): next_path = "/"
     sep = "&" if "?" in next_path else "?"
@@ -221,6 +230,7 @@ urlpatterns = [
     # バックからフロントに飛ばすよう
      path("go/front-home/", to_front_home, name="front_home"),
     # --- 残りは既存のルーティング ---
+    path('api/auth/user/', PatchedUserDetailsView.as_view(), name='rest_user_details'),
     path('api/auth/',          include('dj_rest_auth.urls')),
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
     path('api/',               include(router.urls)),
@@ -239,6 +249,12 @@ urlpatterns = [
     path('api/public/users/<uuid:user_id>/profile/', PublicProfileView.as_view()),
     path('api/profile/me/', MyProfileView.as_view()),
     path('api/public/username/<str:username>/profile/', PublicProfileByNameView.as_view()),
+    path('api/public/username/<str:username>/activity_kpi/', PublicActivityKPIByNameView.as_view()),
+    # company
+    path('api/public/companies/<slug:slug>/', PublicCompanyView.as_view()),
+    path('api/dm/threads/summary/', MyDMThreadsSummary.as_view()),       # 学生一覧
+    path('api/dm/threads/<uuid:thread_id>/detail/', DMThreadDetailView.as_view()),
+    path('api/companies/<uuid:company_id>/invite_by_email/', CompanyMemberInviteView.as_view()),
 
     # 既存 & 新規のViewSet群
     path('api/', include(router.urls)),
@@ -281,3 +297,5 @@ urlpatterns = [
 urlpatterns += [ 
     path("api/auth/social/jwt/", social_jwt_issuer, name="social_jwt_issuer"), 
 ]
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

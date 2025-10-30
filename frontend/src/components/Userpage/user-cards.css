@@ -12,11 +12,14 @@
 .kpi .label{ font-size:.85rem; color:#6b7280; } 
 .kpi .value{ font:700 1.25rem/1.2 system-ui; }
 .kpi .bar{ height:6px; background:#e5e7eb; border-radius:999px; overflow:hidden; }
-.kpi .bar>span{ display:block; height:100%; background:#60a5fa; }
+.kpi .bar>span{ display:block; height:100%; background:#f59e0b; /* 元気なオレンジ */ }
 
 .heatmap{ display:grid; grid-template-columns:repeat(30, 9px); gap:4px; }
 .heatmap .cell{ width:9px; height:9px; border-radius:2px; background:#e5e7eb; }
-.heatmap .on-1{ background:#cfe8ff; } .heatmap .on-2{ background:#9fd0ff; } .heatmap .on-3{ background:#69b5ff; } .heatmap .on-4{ background:#339bff; }
+.heatmap .on-1{ background:#fde68a; } /* 淡い黄 */
+.heatmap .on-2{ background:#fcd34d; } /* 濃い黄 */
+.heatmap .on-3{ background:#fb923c; } /* 橙 */
+.heatmap .on-4{ background:#f87171; }
 
 .portfolio-card{ border:1px solid var(--torail-border); border-radius:.75rem; padding:1rem; background:#fff; }
 

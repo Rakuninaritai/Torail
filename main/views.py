@@ -13,6 +13,10 @@ from django.contrib.auth.views import LogoutView
 from django.conf import settings
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+from rest_framework import parsers
+from datetime import timedelta
+from dj_rest_auth.views import UserDetailsView
+from django.utils import timezone
 
 from .models import (
     User, Team, Subject, Task, Record, TeamMembership, TeamInvitation, Integration,
@@ -27,9 +31,11 @@ from .serializers import (
     LanguageMasterSerializer, UserProfileSerializer, UserProfileWriteSerializer, UserSNSSerializer, PortfolioItemSerializer,
     JobRoleSerializer, TechAreaSerializer, ProductDomainSerializer,
     CompanySerializer, CompanyMemberSerializer, CompanyPlanSerializer, CompanyHiringSerializer,
-    MessageTemplateSerializer, DMThreadSerializer, DMMessageSerializer
+    MessageTemplateSerializer, DMThreadSerializer, DMMessageSerializer,CompanyHiringPublicSerializer,CompanyPublicSerializer
 )
-
+# 当該を返す
+class PatchedUserDetailsView(UserDetailsView):
+    serializer_class = UserSerializer
 # ==== 既存 User ====
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -48,7 +54,7 @@ class LanguageMasterViewSet(viewsets.ReadOnlyModelViewSet):
         if q:
             qs = qs.filter(Q(name__icontains=q) | Q(slug__icontains=q) | Q(aliases__icontains=q))
         return qs
-
+    
 class JobRoleViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = JobRole.objects.all().order_by('name')
     serializer_class = JobRoleSerializer
@@ -78,22 +84,27 @@ class PublicProfileView(APIView):
         prof = getattr(user, 'profile', None)
         if not prof or not prof.is_public:
             return Response({'detail':'not public'}, status=404)
-        return Response(UserProfileSerializer(prof).data)
-
+        return Response(UserProfileSerializer(prof, context={'request': request}).data)
 
 # ==== 自分のプロフィール編集 ====
 class MyProfileView(APIView):
     permission_classes=[IsAuthenticated]
+    parser_classes = [parsers.JSONParser, parsers.FormParser, parsers.MultiPartParser]
     def get(self, request):
         prof, _ = UserProfile.objects.get_or_create(user=request.user)
-        return Response(UserProfileSerializer(prof).data)
+        return Response(UserProfileSerializer(prof, context={'request': request}).data)
 
     def patch(self, request):
         prof, _ = UserProfile.objects.get_or_create(user=request.user)
+        # 画像が来ていたら先に保存
+        f = request.FILES.get('avatar')
+        if f:
+            prof.avatar = f
+            prof.save(update_fields=['avatar'])
         ser = UserProfileWriteSerializer(prof, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         prof = ser.save()
-        return Response(UserProfileSerializer(prof).data)
+        return Response(UserProfileSerializer(prof, context={'request': request}).data)
 
 
 # SNS / PF の簡易CRUD（本人のみ）
@@ -112,6 +123,135 @@ class PortfolioItemViewSet(viewsets.ModelViewSet):
         return PortfolioItem.objects.filter(user=self.request.user).order_by('-created_at')
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+class PublicActivityKPIByNameView(APIView):
+    """
+    公開プロフィールのユーザーについて、
+    本人が記録したすべて（個人/チーム）のうち、確定(timer_state=2)のみを集計。
+    返却：KPI / 直近30日の強度配列(0–4) / 言語別の総時間（時間単位）
+    GET /api/public/username/<username>/activity_kpi/
+      - ?scope=all|personal|team （任意）
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, username):
+        from .models import User, Record
+        user = get_object_or_404(User, username=username)
+
+        prof = getattr(user, 'profile', None)
+        if not prof or not prof.is_public:
+            return Response({'detail': 'not public'}, status=404)
+
+        scope = request.query_params.get('scope', 'all')
+
+        qs = Record.objects.filter(user=user, timer_state=2)
+        if scope == 'personal':
+            qs = qs.filter(team__isnull=True)
+        elif scope == 'team':
+            qs = qs.filter(team__isnull=False)
+
+        # ---- 日別合計（分）
+        daily = {}
+        # 言語内訳用に languages をプリフェッチ
+        qs = qs.only('id', 'date', 'start_time', 'end_time', 'duration').prefetch_related('languages')
+
+        # 言語→合計時間（時間単位）
+        lang_hours = {}  # { "Python": 12.5, ... }
+        OTHER_LABEL = "未指定"
+
+        for rec in qs:
+            # 日付キー（date優先 → end_time → start_time → 今日）
+            if rec.date:
+                dt = rec.date
+            elif rec.end_time:
+                dt = rec.end_time.date()
+            elif rec.start_time:
+                dt = rec.start_time.date()
+            else:
+                dt = timezone.localdate()
+
+            minutes = max(0, round(((rec.duration or 0) / 1000) / 60))
+            key = dt.isoformat()
+            daily[key] = daily.get(key, 0) + minutes
+
+            # --- 言語按分
+            langs = list(rec.languages.all())
+            hours_total = minutes / 60.0
+            if langs:
+                share = hours_total / len(langs)
+                for l in langs:
+                    name = l.name or OTHER_LABEL
+                    lang_hours[name] = lang_hours.get(name, 0.0) + share
+            else:
+                # 言語未指定はまとめる
+                lang_hours[OTHER_LABEL] = lang_hours.get(OTHER_LABEL, 0.0) + hours_total
+
+        # ---- KPIユーティリティ
+        def levels_last_n(daily_map, n=30):
+            today = timezone.localdate()
+            vals, active = [], 0
+            for i in range(n-1, -1, -1):
+                d = today - timedelta(days=i)
+                m = daily_map.get(d.isoformat(), 0)
+                if m > 0: active += 1
+                level = 0 if m == 0 else 1 if m <= 30 else 2 if m <= 60 else 3 if m <= 120 else 4
+                vals.append(level)
+            return vals, active
+
+        def streaks(daily_map):
+            today = timezone.localdate()
+            span = 370
+            cur = 0
+            for i in range(span):
+                d = (today - timedelta(days=i)).isoformat()
+                if daily_map.get(d, 0) > 0: cur += 1
+                else: break
+            run = 0
+            mx = 0
+            for i in range(span, -1, -1):
+                d = (today - timedelta(days=i)).isoformat()
+                if daily_map.get(d, 0) > 0:
+                    run += 1
+                    if run > mx: mx = run
+                else:
+                    run = 0
+            return cur, mx
+
+        last_update = '—'
+        if daily:
+            last_update = sorted([k for k, v in daily.items() if v > 0])[-1]
+
+        activity30, active30 = levels_last_n(daily, 30)
+        _, active7 = levels_last_n(daily, 7)
+        s_now, s_max = streaks(daily)
+
+        offs = []
+        today = timezone.localdate()
+        for i in range(6, -1, -1):
+            d = today - timedelta(days=i)
+            if daily.get(d.isoformat(), 0) == 0:
+                offs.append(f"{d.month}/{d.day}")
+
+        # ---- 言語内訳（時間）を降順で並べ、少数2桁で丸め
+        lang_breakdown = [
+            {"label": name, "hours": round(hours, 2)}
+            for name, hours in sorted(lang_hours.items(), key=lambda x: x[1], reverse=True)
+            if hours > 0
+        ]
+
+        payload = {
+            "kpi": {
+                "streakNow": s_now,
+                "streakMax": s_max,
+                "lastUpdate": last_update,
+                "active7": active7,
+                "active30": active30,
+                "offHint": ", ".join(offs) if offs else "—",
+            },
+            "activity30": activity30,
+            "lang_breakdown": lang_breakdown,  # ★ 追加
+        }
+        return Response(payload, status=200)
 
 
 # ==== Subject/Task/Record（既存ロジックを利用） ====
@@ -220,9 +360,37 @@ class CompanyViewSet(viewsets.ModelViewSet):
         return Company.objects.filter(members__user=self.request.user).distinct()
 
     def perform_create(self, serializer):
-        # 企業登録（オーナー=作成者）
+        # 既にどこかの会社メンバーなら新規作成不可（運用意図通り）
+        if CompanyMember.objects.filter(user=self.request.user).exists():
+            raise PermissionDenied("既にいずれかの会社に所属しています。新規作成はできません。")
         company = serializer.save(owner=self.request.user)
         CompanyMember.objects.create(company=company, user=self.request.user, role='owner')
+    @action(detail=True, methods=['post'], url_path='invite_by_email')
+    def invite_by_email(self, request, pk=None):
+        company = self.get_object()
+        _require_owner(company, request.user)  # オーナーのみ
+
+        email = (request.data.get('email') or '').strip().lower()
+        if not email:
+            return Response({'detail': 'email は必須です'}, status=400)
+
+        try:
+            target = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
+            # 方針：未登録なら“先にサインアップして待ってもらう”
+            return Response({'detail': 'ユーザーが見つかりません。先に企業サインアップをお願いします。'}, status=404)
+
+        # 既に所属？
+        if CompanyMember.objects.filter(company=company, user=target).exists():
+            return Response({'detail': 'すでにこの会社のメンバーです'}, status=400)
+
+        CompanyMember.objects.create(company=company, user=target, role='member')
+        # 学生→両方に昇格
+        if target.account_type == 'student':
+            target.account_type = 'both'
+            target.save(update_fields=['account_type'])
+
+        return Response({'status':'ok'})
 
 class CompanyMemberViewSet(viewsets.ModelViewSet):
     serializer_class = CompanyMemberSerializer
@@ -261,7 +429,65 @@ class CompanyHiringViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("会社メンバーのみ作成できます")
         serializer.save()
 
+class PublicCompanyView(APIView):
+    permission_classes = [AllowAny]
+    def get(self, request, slug):
+        company = get_object_or_404(Company, slug=slug)
+        data = {
+            "company": CompanyPublicSerializer(company).data,
+            "hirings": CompanyHiringPublicSerializer(company.hirings.order_by('-created_at'), many=True).data,
+        }
+        return Response(data)
+class CompanyMemberInviteView(APIView):
+    permission_classes=[IsAuthenticated]
+    def post(self, request, company_id):
+        email = request.data.get('email')
+        comp = get_object_or_404(Company, pk=company_id)
+        _require_owner(comp, request.user)  # ownerのみ
+        user = get_object_or_404(User, email=email)
+        CompanyMember.objects.get_or_create(company=comp, user=user, defaults={'role':'member'})
+        return Response({"status":"ok"})
+# 学生のScoutBox用：スレッド一覧（要約）
+class MyDMThreadsSummary(APIView):
+    permission_classes=[IsAuthenticated]
+    def get(self, request):
+        # 学生側の自分宛スレッド
+        qs = DMThread.objects.filter(user=request.user).select_related('company').order_by('-created_at')
+        # 直近の最後のメッセージとステータス類を添える
+        result = []
+        for th in qs:
+            last = th.messages.order_by('-created_at').first()
+            status = "未読"
+            if last:
+                # 既読状態: 学生が読んだかどうかで判定
+                if last.is_read_by_user: status = "既読"
+                # 返信あり: 学生→company の送信が存在すれば
+                if th.messages.filter(sender='user').exists(): status = "返信あり"
+            result.append({
+                "thread_id": str(th.id),
+                "company": th.company.name,
+                "company_slug": th.company.slug,
+                "subject": last.subject if last else "",
+                "snippet": (last.body[:80] + "…") if last and len(last.body) > 80 else (last.body if last else ""),
+                "sentAt": (last.created_at.strftime("%Y-%m-%d %H:%M") if last else th.created_at.strftime("%Y-%m-%d %H:%M")),
+                "status": status,
+                "tags": [],  # 必要なら CompanyHiring 紐付け等で拡張
+            })
+        return Response(result)
 
+class DMThreadDetailView(APIView):
+    permission_classes=[IsAuthenticated]
+    def get(self, request, thread_id):
+        th = get_object_or_404(DMThread, pk=thread_id)
+        if not (th.user == request.user or CompanyMember.objects.filter(company=th.company, user=request.user).exists()):
+            raise PermissionDenied("参照できません")
+        msgs = DMMessage.objects.filter(thread=th).order_by('created_at').values(
+            'id','sender','subject','body','created_at','is_read_by_company','is_read_by_user'
+        )
+        return Response({
+            "thread": {"id": str(th.id), "company": th.company.name, "company_slug": th.company.slug},
+            "messages": list(msgs),
+        })
 # ==== Templates / DM ====
 class MessageTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = MessageTemplateSerializer
@@ -508,7 +734,7 @@ class PublicProfileByNameView(APIView):
         prof = getattr(user, 'profile', None)
         if not prof or not prof.is_public:
             return Response({'detail':'not public'}, status=404)
-        return Response(UserProfileSerializer(prof).data)
+        return Response(UserProfileSerializer(prof, context={'request': request}).data)
 
 # # backend/main/views.py など
 # def build_discord_oauth_url(team_id: str) -> str:

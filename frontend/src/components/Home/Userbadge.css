@@ -1,0 +1,70 @@
+/* components/UserBadge.css */
+.user-badge {
+  padding: 6px 8px;
+  border: 1px solid var(--torail-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.user-badge__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  background: #f3f4f6; /* ニュートラル */
+  border: 1px solid var(--torail-border);
+}
+
+.user-badge__avatar--fallback {
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #111827;
+  background: #fde68a; /* 明るい黄 */
+}
+
+.user-badge__name {
+  font-weight: 600;
+  color: #111827;
+  text-decoration: none;
+}
+.user-badge__name:hover {
+  text-decoration: underline;
+}
+
+.user-badge__inbox {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--torail-border);
+  border-radius: 999px;
+  background: #fff;
+  text-decoration: none;
+  color: #111827;
+}
+.user-badge__inbox:hover {
+  background: #fef3c7;
+  border-color: #fde68a;
+}
+
+.user-badge__badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 700;
+  color: #fff;
+  background: #ef4444; /* レッド */
+  display: inline-block;
+  text-align: center;
+}

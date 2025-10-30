@@ -3,6 +3,7 @@
 // トピックタスク名義変更??
 // 自動バックアップ&開発環境
 // チーム名アルファベットで
+// mypポートフォリオ編集,博士追加,何年卒追加,県選択し追加,言語選択言語の文字消す,エラーtoast分かりやすく,エラー表示
 // codexコードデバック
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, Route, Routes, useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -34,6 +35,9 @@ import CompanySettingsPage from './pages/Company/CompanySettings';
 import Scout from './pages/Company/Scout';
 import UserPage from './pages/UserPage';
 import ScoutBoxPage from './pages/ScoutBox';
+import UserBadge from './components/Home/UserBadge';
+import PublicCompanyPage from './pages/Company/PublicCompanyPage';
+import LoginCompanyPage from './pages/Company/LoginCompanyPage';
 
 
 /* =========================
@@ -45,6 +49,7 @@ function TeamRouteBinder({ children }) {
   const decoded = decodeURIComponent(teamSlug || '');
   const { teams, currentTeamId, selectTeam } = useTeam();
   const navigate = useNavigate();
+  
 
   const team = useMemo(() => teams.find(t => t.name === decoded), [teams, decoded]);
 
@@ -157,6 +162,24 @@ function App() {
       navigate(next || '/', { replace: true });
     }
   }, [Token, location.pathname, location.search, navigate]);
+  useEffect(() => {
+  console.log('Token =', Token);
+}, [Token]);
+  const isCompany = !!(Token && typeof Token === 'object' && Token.account_type === 'company');
+  const [MyProfile, setMyProfile] = useState(null);
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      if (!Token) { setMyProfile(null); return; }
+      try {
+        const me = await api('/profile/me/', { method: 'GET' });
+        if (!ignore) setMyProfile(me);
+      } catch {
+        if (!ignore) setMyProfile(null);
+      }
+    })();
+    return () => { ignore = true; };
+  }, [Token]);
 
 
   // 個人なら "/" or "/suffix"
@@ -175,8 +198,26 @@ function App() {
         <div className="logo">
           <img src={logo} alt="Logo" width={300} />
         </div>
+        {Token  && !isCompany&&(
+          <div className="px-3 pt-2 pb-1">
+            <UserBadge
+              username={Token?.username}
+              avatarUrl={MyProfile?.avatar_url}
+              /* inboxCount={未読件数があれば入れる} */
+            />
+          </div>
+        )}
+        {Token && isCompany && (
+          <div className="px-3 pt-2 pb-1">
+            <UserBadge
+              username={Token?.username}
+              avatarUrl={MyProfile?.avatar_url}
+            />
+            <div className="small text-muted mt-1">企業アカウント</div>
+          </div>
+        )}
 
-        {Token && (
+        {Token &&!isCompany && (
           <div className="p-3">
             <select
               className="form-select"
@@ -232,42 +273,33 @@ function App() {
 
         <div className="nav flex-column" id="sidebarNav" role="tablist">
           {/* Home */}
-          <NavLink
-            to={teamSlugPath('')}
-            end
-            className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
-          >
-            <i className="bi bi-house-door-fill"></i> ホーム
-          </NavLink>
-
-          {/* 測定 */}
-          {Token && (
-            <NavLink
-              to={teamSlugPath('addrecords')}
-              className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
-            >
-              <i className="bi bi-journal-text"></i> 測定
-            </NavLink>
-          )}
-
-          {/* 統計 */}
-          {Token && (
-            <NavLink
-              to={teamSlugPath('records')}
-              className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
-            >
-              <i className="bi bi-bar-chart-line-fill"></i> 統計
-            </NavLink>
-          )}
-
-          {/* 設定 */}
-          {Token && (
-            <NavLink
-              to={teamSlugPath('settings')}
-              className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
-            >
-              <i className="bi bi-gear"></i> 設定・招待
-            </NavLink>
+          {isCompany ? (
+            <>
+              <NavLink to="/company/dashboard" className={({isActive})=>isActive?'nav-link active':'nav-link'}>
+                <i className="bi bi-speedometer2"></i> ダッシュボード
+              </NavLink>
+              <NavLink to="/company/scout" className={({isActive})=>isActive?'nav-link active':'nav-link'}>
+                <i className="bi bi-send"></i> スカウト
+              </NavLink>
+              <NavLink to="/company/settings" className={({isActive})=>isActive?'nav-link active':'nav-link'}>
+                <i className="bi bi-gear"></i> 会社設定
+              </NavLink>
+            </>
+          ) : (
+            <>
+              <NavLink to={teamSlugPath('')} end className={({isActive})=>isActive?'nav-link active':'nav-link'}>
+                <i className="bi bi-house-door-fill"></i> ホーム
+              </NavLink>
+              {Token && <NavLink to={teamSlugPath('addrecords')} className={({isActive})=>isActive?'nav-link active':'nav-link'}>
+                <i className="bi bi-journal-text"></i> 測定
+              </NavLink>}
+              {Token && <NavLink to={teamSlugPath('records')} className={({isActive})=>isActive?'nav-link active':'nav-link'}>
+                <i className="bi bi-bar-chart-line-fill"></i> 統計
+              </NavLink>}
+              {Token && <NavLink to={teamSlugPath('settings')} className={({isActive})=>isActive?'nav-link active':'nav-link'}>
+                <i className="bi bi-gear"></i> 設定・招待
+              </NavLink>}
+            </>
           )}
         </div>
 
@@ -289,22 +321,33 @@ function App() {
           <h5 id="mobileNavLabel">Menu</h5>
           <button type="button" className="btn-close" data-bs-dismiss="offcanvas" aria-label="Close" />
         </div>
+
         <div className="offcanvas-body">
           <div className="logo text-center mb-4">
             <img src={logo} alt="Logo" width={300} />
           </div>
-          <div className="p-3">
-            <select
-              className="form-select"
-              value={currentTeamId || ''}
-              onChange={e => selectTeam(e.target.value || null)}
-            >
-              <option value="">個人</option>
-              {teams.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-            {Token && (
+
+          {/* ユーザーバッジ */}
+          {Token && (
+            <div className="mb-3 text-center">
+              <UserBadge username={Token?.username} avatarUrl={MyProfile?.avatar_url} />
+              {isCompany && <div className="small text-muted mt-1">企業アカウント</div>}
+            </div>
+          )}
+
+          {/* チーム選択（個人のみ） */}
+          {!isCompany && Token && (
+            <div className="p-3">
+              <select
+                className="form-select"
+                value={currentTeamId || ''}
+                onChange={e => selectTeam(e.target.value || null)}
+              >
+                <option value="">個人</option>
+                {teams.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
               <button
                 className="btn btn-outline-secondary w-100 mt-2"
                 data-bs-toggle="modal"
@@ -312,36 +355,89 @@ function App() {
               >
                 ＋ チーム作成
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
+          {/* ナビゲーション */}
           <nav className="nav flex-column">
-            <NavLink to={teamSlugPath('')} end className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-              <i className="bi bi-house-door-fill"></i> ホーム
-            </NavLink>
-            {Token && (
-              <NavLink to={teamSlugPath('addrecords')} className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-                <i className="bi bi-journal-text"></i> 測定
-              </NavLink>
+            {isCompany ? (
+              <>
+                <NavLink
+                  to="/company/dashboard"
+                  className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                  data-bs-dismiss="offcanvas"
+                >
+                  <i className="bi bi-speedometer2"></i> ダッシュボード
+                </NavLink>
+                <NavLink
+                  to="/company/scout"
+                  className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                  data-bs-dismiss="offcanvas"
+                >
+                  <i className="bi bi-send"></i> スカウト
+                </NavLink>
+                <NavLink
+                  to="/company/settings"
+                  className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                  data-bs-dismiss="offcanvas"
+                >
+                  <i className="bi bi-gear"></i> 会社設定
+                </NavLink>
+              </>
+            ) : (
+              <>
+                <NavLink
+                  to={teamSlugPath('')}
+                  end
+                  className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                  data-bs-dismiss="offcanvas"
+                >
+                  <i className="bi bi-house-door-fill"></i> ホーム
+                </NavLink>
+                {Token && (
+                  <NavLink
+                    to={teamSlugPath('addrecords')}
+                    className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                    data-bs-dismiss="offcanvas"
+                  >
+                    <i className="bi bi-journal-text"></i> 測定
+                  </NavLink>
+                )}
+                {Token && (
+                  <NavLink
+                    to={teamSlugPath('records')}
+                    className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                    data-bs-dismiss="offcanvas"
+                  >
+                    <i className="bi bi-bar-chart-line-fill"></i> 統計
+                  </NavLink>
+                )}
+                {Token && (
+                  <NavLink
+                    to={teamSlugPath('settings')}
+                    className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                    data-bs-dismiss="offcanvas"
+                  >
+                    <i className="bi bi-gear"></i> 設定・招待
+                  </NavLink>
+                )}
+              </>
             )}
+
+            {/* ログアウト */}
             {Token && (
-              <NavLink to={teamSlugPath('records')} className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-                <i className="bi bi-bar-chart-line-fill"></i> 統計
-              </NavLink>
-            )}
-            {Token && (
-              <NavLink to={teamSlugPath('settings')} className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-                <i className="bi bi-gear"></i> 設定・招待
-              </NavLink>
-            )}
-            {Token && (
-              <LogoutBtn className="nav-link mt-3 text-white" onLogoutSuccess={handleLogoutSuccess}>
+              <LogoutBtn
+                className="nav-link mt-3 text-white"
+                onLogoutSuccess={handleLogoutSuccess}
+                data-bs-dismiss="offcanvas"
+              >
                 <i className="bi bi-box-arrow-right"></i> ログアウト
               </LogoutBtn>
             )}
           </nav>
         </div>
       </div>
+
 
       <main className="flex-grow-1 p-3" style={{ backgroundColor: '#f6f8fa' }}>
         <button className="btn btn-outline-secondary d-md-none mb-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileNav">
@@ -436,6 +532,11 @@ function App() {
           <Route path='/company/settings' element={<CompanySettingsPage isAdmin={true} />}/>
           <Route path="/mypage/:username" element={<UserPage token={Token} />} />
           <Route path='/scoutbox' element={<ScoutBoxPage/>} />
+          {/* 仮追加 */}
+          <Route path='/company/public/:slug' element={<PublicCompanyPage/>}/>
+          <Route path='/company/login' element={<LoginCompanyPage/>}/>
+          <Route/>
+
           {/* 404ページ常にルート最下層で */}
           <Route path='*' element={<NotFound/>} />
         </Routes>

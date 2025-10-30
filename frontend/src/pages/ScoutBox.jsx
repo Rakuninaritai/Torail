@@ -1,49 +1,33 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import ScoutFilters from "../components/Scoutbox/ScoutFilters";
 import ScoutList from "../components/Scoutbox/ScoutList";
 import DetailDrawer from "../components/Scoutbox/DetailDrawer";
 import "../components/Scoutbox/scoutbox.css";
+import { api } from "../api";
 
-export default function ScoutBoxPage() {
+export default function  ScoutBoxPage() {
   // ダミーデータ
   const [items, setItems] = useState([
-    {
-      id: "1",
-      company: "Torail株式会社",
-      status: "未読",
-      subject: "カジュアル面談のご相談",
-      snippet: "山本さん、Pythonの継続が素晴らしく… 現在ストリーク8日達成中とのことで…",
-      tags: ["新卒", "フルリモート"],
-      sentAt: "2025-09-12 14:21",
-      body: "山本さん、Pythonの継続が素晴らしく、現状のプロジェクトでも活躍できると感じました。平日18–21時のどこかでオンラインにてお話できませんか？",
-      jobUrl: "#",
-      from: "採用担当 田中",
-    },
-    {
-      id: "2",
-      company: "Example Inc.",
-      status: "返信あり",
-      subject: "長期インターンのご提案",
-      snippet: "TypeScriptでの開発経験を拝見し…ポジションのご紹介を…",
-      tags: ["インターン", "出社/一部リモート"],
-      sentAt: "2025-09-10 10:03",
-      body: "TypeScriptとReact中心の長期インターンです。週3〜、学業優先で柔軟に調整可能です。",
-      jobUrl: "#",
-      from: "HR 佐藤",
-    },
-    {
-      id: "3",
-      company: "TechWorks LLC",
-      status: "既読",
-      subject: "Pythonエンジニア募集について",
-      snippet: "AIチームでのバックエンド開発を…",
-      tags: ["新卒", "フルリモート"],
-      sentAt: "2025-09-05 18:40",
-      body: "バックエンドAPIとバッチの実装が主担当です。Python, Django経験が活きます。",
-      jobUrl: "#",
-      from: "採用担当 鈴木",
-    },
+    
   ]);
+  useEffect(() => {
+  (async () => {
+    try {
+      const rows = await api("/dm/threads/summary/", { method: "GET" });
+      setItems(rows.map(r => ({
+        id: r.thread_id,
+        company: r.company,
+        status: r.status,
+        subject: r.subject || "(件名なし)",
+        snippet: r.snippet || "",
+        tags: r.tags || [],
+        sentAt: r.sentAt,
+      })));
+    } catch (e) {
+      console.error("スカウトBOX取得失敗", e);
+    }
+  })();
+}, []);
 
   const [filters, setFilters] = useState({ q: "", status: "すべて", range: "指定なし", sort: "新着" });
   const [quickFilter, setQuickFilter] = useState("すべて");
@@ -75,13 +59,41 @@ export default function ScoutBoxPage() {
     return arr;
   }, [items, filters, quickFilter]);
 
-  const openDetail = (it) => { setCurrent(it); setOpen(true); };
+  const openDetail = async (it) => {
+    const res = await api(`/dm/threads/${it.id}/detail/`, { method: "GET" });
+    const last = res.messages?.slice(-1)[0];
+    setCurrent({
+      id: it.id,
+      company: res.thread.company,
+      status: it.status,
+      subject: last?.subject || it.subject,
+      body: last?.body || "",
+      sentAt: last?.created_at || it.sentAt,
+      tags: it.tags,
+      jobUrl: "#",
+      from: last?.sender === "company" ? res.thread.company : "あなた",
+    });
+    setOpen(true);
+  };
+
   const closeDetail = () => setOpen(false);
 
-  const reply = () => {
+  const  reply = async () => {
     if (!current) return;
-    setItems(list => list.map(x => x.id===current.id ? { ...x, status: "返信あり" } : x));
-    setOpen(false);
+    const el = document.getElementById('replyBox');
+    const text = el?.value?.trim();
+    if (!text) return;
+    try {
+      await api('/dm/messages/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thread: current.id, subject: current.subject || '', body: text })
+      });
+      setItems(list => list.map(x => x.id===current.id ? ({ ...x, status: "返信あり" }) : x));
+      setOpen(false);
+    } catch(e) {
+      console.warn('reply failed', e);
+    }
   };
 
   const decline = () => {

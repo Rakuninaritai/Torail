@@ -313,6 +313,7 @@ from django.conf import settings
 from typing import List
 from cryptography.fernet import Fernet
 import base64
+from django.core.validators import FileExtensionValidator
 
 # ------------------------------------------------------------
 # 既存 User を拡張（アカウント種別フラグを追加）
@@ -396,6 +397,13 @@ class UserProfile(models.Model):
     prefecture= models.CharField(max_length=60, blank=True, default="")
     grade     = models.CharField(max_length=4, choices=GRADE_CHOICES, blank=True, default="")
     bio       = models.TextField(blank=True, default="")
+    vision    = models.TextField(blank=True, default="")
+     # 追加: アイコン（Djangoで保存）
+    avatar    = models.ImageField(
+        upload_to="avatars/",
+        blank=True, null=True,
+        validators=[FileExtensionValidator(["jpg","jpeg","png","webp"])]
+    )
 
     # 選択式マスター
     desired_jobs    = models.ManyToManyField(JobRole, blank=True, related_name='profiles')
@@ -484,12 +492,24 @@ class Company(models.Model):
     id    = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='owned_companies')
     name  = models.CharField(max_length=120, unique=True)
+    slug  = models.SlugField(max_length=140, unique=True, default="", blank=True) 
     industry = models.CharField(max_length=120, blank=True, default="")
     website  = models.URLField(blank=True, default="")
     description = models.TextField(blank=True, default="")
     logo_url = models.URLField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self): return self.name
+    def save(self, *a, **kw):
+        from django.utils.text import slugify
+        if not self.slug:
+            base = slugify(self.name) or str(self.id)[:8]
+            s = base
+            i = 1
+            while Company.objects.filter(slug=s).exclude(pk=self.pk).exists():
+                i += 1
+                s = f"{base}-{i}"
+            self.slug = s
+        return super().save(*a, **kw)
 
 class CompanyMember(models.Model):
     ROLE_CHOICES = [('owner','Owner'), ('member','Member')]
