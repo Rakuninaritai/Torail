@@ -252,6 +252,7 @@
 # main/serializers.py
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from rest_framework.validators import UniqueValidator
 from dj_rest_auth.registration.serializers import RegisterSerializer
 
@@ -432,7 +433,24 @@ class RecordWriteSerializer(serializers.ModelSerializer):
         instance.save()
         if langs is not None: instance.languages.set(langs)
         return instance
+    
+    def validate(self, attrs):
+        # CO: PATCH/PUT の場合は instance が存在。create の場合は None
+        instance = getattr(self, 'instance', None)
+        request = self.context.get('request')
+        user = request.user if request else None
 
+        # CO: 今回の入力で「未確定（state≠2）」になりそうかを判定
+        next_state = attrs.get('timer_state', getattr(instance, 'timer_state', None))
+        will_be_active = (next_state is not None and next_state != 2)
+
+        if will_be_active and user:
+            # CO: 自分の他の“未確定”がないかチェック（自分自身は除外）
+            qs = Record.objects.filter(user=user).exclude(pk=getattr(instance, 'pk', None)).filter(~Q(timer_state=2))
+            if qs.exists():
+                # CO: アプリ層でも早めにエラー。DB層で弾かれるが、わかりやすいメッセージを返す
+                raise serializers.ValidationError({'timer_state': '未確定レコードは同時に1件までです。先に確定または停止してください。'})
+        return super().validate(attrs)
 
 # ------------- Company / Member / Plan / Hiring -------------
 class CompanySerializer(serializers.ModelSerializer):

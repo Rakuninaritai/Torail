@@ -1,199 +1,571 @@
-// =============================================
-// File: src/components/Timer/MediaPipeMonitor.jsx
-// Purpose: Webcam-based monitoring using **CDN only** (no npm install)
-// Features:
-//   - 離席(顔なし)で自動中断
-//   - グー(Closed_Fist)で中断/再開トグル
-// How it works:
-//   - modules/wasm/models すべてCDNから取得（ダウンロード/同梱不要）
-//   - esm.run から ESM を動的 import
-//   - jsDelivr / Google Cloud Storage の公式配布モデルを参照
-//   - すべての行に日本語コメントを付与
-// =============================================
+// MediaPipeMonitor.jsx（CDN 版・要望反映 最終）
+// 目的：顔検出と手ジェスチャ（グー/パー）でタイマーを中断/再開。
+// 変更点：
+//  - グー検出の精度向上（指カール＋親指＋手の開き度の複合/連続フレーム安定化）
+//  - 自動再開は「顔なし→自動中断」時のみ有効
+//  - すべての経路で onAway/onFist/onPalm が呼ばれ、親で音が鳴る想定
+//  - 循環初期化・ref二重化対策は前版の安定化を踏襲
 
-// ▼ React の API を読み込む
-import React, { useEffect, useRef, useState } from "react"; // useEffect: 副作用処理, useRef: 値の永続化, useState: 状態管理
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-// ▼ このコンポーネントは外部からコールバックを受け取り、
-//   顔が一定時間検出されない時(onAway)や、グー検出時(onFist)に通知します。
+// MediaPipe Tasks Vision（CDN）を ESM で直接 import
+import {
+  FilesetResolver,
+  FaceDetector,
+  HandLandmarker,
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21";
+
+// バッジ表示用の定数
+const BADGE = {
+  INIT: "initializing",
+  ACTIVE: "active",
+  NO_FACE: "no-face",
+  BLOCKED: "blocked",
+  ERROR: "error",
+  DISABLED: "disabled",
+  IDLE: "idle",
+};
+
 export default function MediaPipeMonitor({
-  enabled = true,              // enabled: 監視のON/OFFを親から制御（falseなら何もしない）
-  onAway = () => {},           // onAway: 顔が一定時間検出されないと1回呼ばれるコールバック
-  onFist = () => {},           // onFist: グー(Closed_Fist)検出時に呼ばれるコールバック（デバウンスあり）
-  awayThresholdMs = 10_000,    // awayThresholdMs: 顔が見えない時間の閾値(ミリ秒)。既定10秒
-  gestureCooldownMs = 1500,    // gestureCooldownMs: グー検出後のクールダウン(ミリ秒)。連続誤作動抑制
-  minFistScore = 0.8,          // minFistScore: グー判定のスコア閾値。大きいほど厳しい
-  frameIntervalMs = 66,        // frameIntervalMs: 推論ループの間隔(ミリ秒)。約15fps相当
-  showPreview = false,         // showPreview: デバッグ用にビデオプレビューを表示するか
-}) {                           // ここからコンポーネント本体
+  enabled = true,           // 親からの全体有効/無効
+  timerStateNum = 0,        // 0: 実行中, 1: 中断中, 3: その他
+  onAway,                   // 顔なし10秒で自動中断
+  onFist,                   // グーで中断
+  onPalm,                   // パーで再開
+  awayThresholdMs = 10_000, // 顔なし継続秒数（デフォ10秒）
+  gestureCooldownMs = 1_200,// ジェスチャ発火クールダウン
+  frameIntervalMs = 80,     // 推論間隔（約12.5fps）
+  showPreview = true,       // デバッグプレビュー表示
+  autoResume = false,       // 顔で自動再開するか（ただし顔なし由来の中断のみ）
+  gestureStableFrames = 2,  // ★追加：同じジェスチャが連続何フレームで確定とみなすか
+}) {
+  // UI ステート
+  const [badge, setBadge] = useState(BADGE.INIT);  // バッジ表示用
+  const [reason, setReason] = useState("");        // エラー理由表示
+  const [monitorOn, setMonitorOn] = useState(true);// 監視トグル
+  const [secondsToPause, setSecondsToPause] = useState(null); // 顔なしカウントダウン
+  const [hasFace, setHasFace] = useState(false);   // 顔検出フラグ（デバッグ用）
 
-  // ▼ DOM 要素や定期処理を保持するための ref を定義
-  const videoRef = useRef(null);             // videoRef: <video> 要素への参照（カメラ映像を表示/供給）
-  const loopRef = useRef(null);              // loopRef: setTimeout によるループIDを保持して停止に使う
-  const lastFaceSeenAtRef = useRef(Date.now()); // lastFaceSeenAtRef: 最後に顔を検出した時刻(ミリ秒)
-  const lastGestureAtRef = useRef(0);        // lastGestureAtRef: 最後にグーを処理した時刻(デバウンス用)
+  // DOM / タスク / ストリームの参照
+  const videoRef = useRef(null);     // hidden video（常時1つ）
+  const canvasRef = useRef(null);    // プレビュー用キャンバス
+  const rafRef = useRef(null);       // requestAnimationFrame のハンドル
+  const streamRef = useRef(null);    // getUserMedia の MediaStream
+  const faceRef = useRef(null);      // FaceDetector インスタンス
+  const handRef = useRef(null);      // HandLandmarker インスタンス
+  const filesetRef = useRef(null);   // Fileset
 
-  // ▼ 画面状態フラグ。モデル読み込み/カメラ準備が整ったら true
-  const [ready, setReady] = useState(false); // ready: 初期化完了かをUI用に保持
+  // 制御用の参照
+  const awayStartRef = useRef(null);           // 顔なし開始時刻
+  const lastGestureAtRef = useRef(0);          // 直近ジェスチャ発火時刻（クールダウン用）
+  const lastInferAtRef = useRef(0);            // 直近推論時刻（フレーム間引き用）
+  const lastHandLandmarksRef = useRef([]);     // 最新の手ランドマーク（描画用）
+  const lastPausedReasonRef = useRef(null);    // ★追加：直近の中断理由 'away' | 'manual' | null
 
-  // ▼ MediaPipe タスクのインスタンスを格納する ref（初期化後に代入）
-  const gestureRecognizerRef = useRef(null); // gestureRecognizerRef: 手のジェスチャー認識器
-  const faceDetectorRef = useRef(null);      // faceDetectorRef: 顔検出器
+  // ジェスチャ安定化用（同じ推論結果が連続した回数をカウント）
+  const gestureStableCountRef = useRef(0);     // 連続カウント
+  const gestureLastFrameRef = useRef(null);    // 前フレームのラベル 'fist' | 'palm' | null
 
-  // ▼ 依存ファイルのCDN URLを定義（npm不要のため全て外部参照）
-  const wasmBaseUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"; // MediaPipe Tasks の WASM 配布場所
-  const gestureModel = "https://storage.googleapis.com/mediapipe-tasks/gesture_recognizer/gesture_recognizer.task"; // ジェスチャー用モデル(.task)
-  const faceModel = "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite"; // 顔検出モデル(.tflite)
+  // 親のコールバックは ref 経由で参照（依存に入れない）
+  const onAwayRef = useRef(onAway);
+  const onFistRef = useRef(onFist);
+  const onPalmRef = useRef(onPalm);
+  useEffect(() => { onAwayRef.current = onAway; }, [onAway]);
+  useEffect(() => { onFistRef.current = onFist; }, [onFist]);
+  useEffect(() => { onPalmRef.current = onPalm; }, [onPalm]);
 
-  // ▼ CDNから @mediapipe/tasks-vision を動的に読み込むヘルパー
-  const loadTasks = async () => {                                        // loadTasks: ESM をランタイムで import
-    const mod = await import("https://esm.run/@mediapipe/tasks-vision@latest"); // esm.run 経由で最新を取得（固定したい場合は@0.xに）
-    return mod;                                                          // 読み込んだモジュール（FilesetResolver等が入っている）
-  };
+  // クールダウン判定（現在時刻との差分で判定）
+  const inCooldown = useCallback(
+    () => Date.now() - lastGestureAtRef.current < gestureCooldownMs,
+    [gestureCooldownMs]
+  );
 
-  // ▼ 監視ロジック：enabled が true の間だけ初期化＆ループを回す
-  useEffect(() => {                                                      // useEffect: マウント/更新時に副作用を実行
-    if (!enabled) return;                                                // enabled が false なら早期リターン（何もしない）
+  // 有効かつ監視ONか
+  const effectiveEnabled = enabled && monitorOn;
 
-    let stream;                                                          // stream: カメラの MediaStream を保持
-    let destroyed = false;                                               // destroyed: クリーンアップ済みかのフラグ（競合防止）
+  // 表示バッジの決定
+  const status = useMemo(() => {
+    if (!enabled) return BADGE.DISABLED;
+    if (!monitorOn) return BADGE.IDLE;
+    return badge;
+  }, [enabled, monitorOn, badge]);
 
-    async function init() {                                              // init: 初期化処理をまとめた非同期関数
-      try {                                                              // try: 失敗時でも finally で後始末できるように
-        // --- (1) カメラ起動 -------------------------------------------------
-        stream = await navigator.mediaDevices.getUserMedia({             // getUserMedia: カメラ映像を要求
-          video: { facingMode: "user" },                                // facingMode: フロントカメラ（ノートPCは通常これ）
-          audio: false,                                                  // audio: 音声は不要なのでオフ
-        });
-        if (!videoRef.current) return;                                   // videoRef が未セットなら処理中断
-        videoRef.current.srcObject = stream;                             // 取得したカメラ映像を <video> に流し込む
-        await videoRef.current.play();                                   // ビデオ再生を開始（モバイルではユーザー操作が必要な場合あり）
+  // 後片付け（動画停止、ストリーム停止、タスク破棄）
+  const cleanup = useCallback(() => {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    try {
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.srcObject = null;
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+      faceRef.current?.close?.();
+      handRef.current?.close?.();
+    } catch {}
+    faceRef.current = null;
+    handRef.current = null;
+    filesetRef.current = null;
 
-        // --- (2) MediaPipe タスク読み込み --------------------------------------
-        const { FilesetResolver, GestureRecognizer, FaceDetector } = await loadTasks(); // CDNからモジュール関数を取得
-        const filesetResolver = await FilesetResolver.forVisionTasks(wasmBaseUrl);     // WASM の配置場所を指定して初期化
+    // 監視用のステート/参照もリセット
+    setSecondsToPause(null);
+    setHasFace(false);
+    awayStartRef.current = null;
+    lastHandLandmarksRef.current = [];
+    gestureStableCountRef.current = 0;
+    gestureLastFrameRef.current = null;
+  }, []);
 
-        gestureRecognizerRef.current = await GestureRecognizer.createFromOptions(      // ジェスチャー認識器を生成
-          filesetResolver,                                                             // ファイルセットリゾルバ（WASM解決）
-          {
-            baseOptions: { modelAssetPath: gestureModel },                             // 使用する .task モデルのURL
-            runningMode: "VIDEO",                                                    // VIDEO: 連続フレーム入力モード
-            numHands: 2,                                                               // 検出する手の最大数（2＝両手）
-          }
-        );
+  // ========== 描画（プレビュー） ==========
+  const drawOverlay = useCallback((canvas, video, faceBoxes, handLandmarksList) => {
+    if (!canvas || !video) return;
 
-        faceDetectorRef.current = await FaceDetector.createFromOptions(                // 顔検出器を生成
-          filesetResolver,                                                             // 同上
-          {
-            baseOptions: { modelAssetPath: faceModel },                                // 使用する顔検出モデル(.tflite)のURL
-            runningMode: "VIDEO",                                                    // VIDEOモードでの推論
-          }
-        );
+    const W = 320, H = 240;                 // プレビューサイズ
+    if (canvas.width !== W) canvas.width = W;
+    if (canvas.height !== H) canvas.height = H;
 
-        setReady(true);                                                                // UI用フラグを true（準備完了）
-        lastFaceSeenAtRef.current = Date.now();                                        // 最終顔検出時刻を現在に初期化
+    const vw = video.videoWidth || 1;       // video の実サイズ（0ガード）
+    const vh = video.videoHeight || 1;
+    const sx = W / vw;                      // スケール X
+    const sy = H / vh;                      // スケール Y
 
-        // --- (3) 推論ループ -----------------------------------------------------
-        const loop = async () => {                                                     // loop: 一定間隔で推論を回す関数
-          if (!videoRef.current || destroyed) return;                                  // video が無い/破棄済みなら終了
-          const video = videoRef.current;                                              // video: 局所変数に参照
-          const tsMs = Date.now();                                                     // tsMs: このフレームのタイムスタンプ（ms）
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, W, H);
 
-          try {                                                                        // 推論エラーに備える
-            // (a) 顔検出：離席/非注視の検出に利用
-            if (faceDetectorRef.current) {                                             // 顔検出器が用意できているかチェック
-              const faces = faceDetectorRef.current.detectForVideo(video, tsMs)?.detections ?? []; // 現フレームでの顔検出
-              if (faces.length > 0) {                                                  // 顔が1つ以上検出された場合
-                lastFaceSeenAtRef.current = tsMs;                                      // 最終検出時刻を更新
-              } else {                                                                 // 顔が検出されない場合
-                if (tsMs - lastFaceSeenAtRef.current >= awayThresholdMs) {             // 閾値を超えて不在が続いたら
-                  lastFaceSeenAtRef.current = tsMs;                                    // 連発防止のため基準時刻を更新（簡易レート制限）
-                  onAway();                                                            // 親へ「離席」と通知（タイマー中断を促す）
-                }
-              }
-            }
+    // 背景：最新フレームを描画
+    try { ctx.drawImage(video, 0, 0, W, H); } catch {}
 
-            // (b) ジェスチャー認識：グー(Closed_Fist) でトグル
-            if (gestureRecognizerRef.current) {                                        // ジェスチャー認識器があるか確認
-              const result = gestureRecognizerRef.current.recognizeForVideo(video, tsMs); // 現フレームでの手指ジェスチャー推論
-              const candidates = (result?.gestures ?? [])                               // gestures: 各手の候補配列(二次元)
-                .flat()                                                                // 二次元配列を平坦化
-                .sort((a, b) => b.score - a.score);                                    // スコア降順でソートして最上位を取りやすく
-              const top = candidates[0];                                               // top: 最も確からしい候補
-              if (top && top.categoryName === "Closed_Fist" && top.score >= minFistScore) { // グーかつスコアが閾値以上
-                const now = Date.now();                                                // now: 現在時刻(ms)
-                if (now - lastGestureAtRef.current >= gestureCooldownMs) {             // 前回からクールダウン経過？
-                  lastGestureAtRef.current = now;                                      // 最終処理時刻を更新
-                  onFist();                                                            // 親へ「グー」トリガを通知（中断/再開トグル）
-                }
-              }
-            }
-          } catch (e) {                                                                // 予期せぬ推論エラーを捕捉
-            // console.warn(e);                                                        // 本番ではノイズになるため黙殺（必要なら有効化）
-          }
-
-          loopRef.current = setTimeout(loop, frameIntervalMs);                         // 次フレームの実行を予約（擬似的なfps制御）
-        };
-
-        loop();                                                                        // 最初のループを開始
-      } catch (err) {                                                                  // カメラ権限エラー等を捕捉
-        // 必要に応じて UI 側でトースト表示などを行う（このコンポーネント内では握りつぶし）
+    // 顔の矩形（緑）
+    if (faceBoxes?.length) {
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "lime";
+      for (const bb of faceBoxes) {
+        // FaceDetector は originX/Y, width, height（画素座標）を返す
+        const x = (bb.originX ?? (bb.xCenter - bb.width / 2)) * sx;
+        const y = (bb.originY ?? (bb.yCenter - bb.height / 2)) * sy;
+        const w = (bb.width ?? 0) * sx;
+        const h = (bb.height ?? 0) * sy;
+        ctx.strokeRect(x, y, w, h);
       }
     }
 
-    init();                                                                            // 初期化を実行
+    // 手のランドマーク（白）
+    if (handLandmarksList?.length) {
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "white";
+      ctx.fillStyle = "white";
+      const fingers = [
+        [0, 1, 2, 3, 4],
+        [0, 5, 6, 7, 8],
+        [0, 9, 10, 11, 12],
+        [0, 13, 14, 15, 16],
+        [0, 17, 18, 19, 20],
+      ];
+      for (const lm of handLandmarksList) {
+        // 指の骨格ライン
+        for (const idxs of fingers) {
+          for (let i = 1; i < idxs.length; i++) {
+            const a = lm[idxs[i - 1]], b = lm[idxs[i]];
+            ctx.beginPath();
+            ctx.moveTo(a.x * W, a.y * H);
+            ctx.lineTo(b.x * W, b.y * H);
+            ctx.stroke();
+          }
+        }
+        // 各ランドマーク点
+        for (const p of lm) {
+          ctx.beginPath();
+          ctx.arc(p.x * W, p.y * H, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }, []);
 
-    return () => {                                                                     // クリーンアップ関数（アンマウント時に実行）
-      destroyed = true;                                                                // 破棄フラグを立て、ループ継続を防止
-      if (loopRef.current) clearTimeout(loopRef.current);                              // 進行中の setTimeout をクリア
-      try { videoRef.current && videoRef.current.pause(); } catch {}                   // video 再生を停止（例外は無視）
-      if (stream) stream.getTracks().forEach(t => t.stop());                           // カメラの各トラックを停止（デバイス解放）
-      setReady(false);                                                                 // UI用フラグをリセット
-    };                                                                                 // クリーンアップここまで
-  }, [enabled, awayThresholdMs, gestureCooldownMs, minFistScore, frameIntervalMs]);    // 依存配列：パラメータ変更時は再初期化
+  // ========== グー/パー判定のユーティリティ ==========
+  // 正規化距離（0-1座標間のユークリッド距離）
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
-  // ▼ UI: プレビュー表示（デバッグ時のみ見える）。本番は非表示でOK
+  // 手の開き度（前版の「手のひら開き」指標）
+  const palmOpenness = (lm) => {
+    const wrist = lm[0];
+    const tips = [lm[4], lm[8], lm[12], lm[16], lm[20]];
+    let s = 0;
+    for (const t of tips) s += dist(wrist, t);
+    return s; // 値が大きいほど開いている
+  };
+
+  // 指が曲がっているか（「tip が PIP より手首に近い」なら曲げているとみなす）
+  const isFingerCurled = (lm, tipIdx, pipIdx) => {
+    const wrist = lm[0];
+    const tipCloserThanPip = dist(lm[tipIdx], wrist) < dist(lm[pipIdx], wrist) - 0.02; // 少しマージン
+    return tipCloserThanPip;
+  };
+
+  // 親指がたたまれているか（親指先端が手の中心に近いかでざっくり判定）
+  const isThumbFolded = (lm) => {
+    const thumbTip = lm[4];
+    const palmCoreIdx = [0, 1, 5, 9, 13, 17];                 // 手のひら中核
+    const palmCenter = palmCoreIdx.reduce(
+      (acc, i) => ({ x: acc.x + lm[i].x / palmCoreIdx.length, y: acc.y + lm[i].y / palmCoreIdx.length }),
+      { x: 0, y: 0 }
+    );
+    const dTipToPalm = dist(thumbTip, palmCenter);
+    const dIdxMcpToPalm = dist(lm[5], palmCenter);            // 人差し指付け根との比較
+    return dTipToPalm < dIdxMcpToPalm * 0.9;                  // 充分近ければ「たたみ込み」
+  };
+
+  // ★強化版グー判定：指4本のカール＋親指たたみ＋手の開き度の閾値
+  const isFistStrict = (lm) => {
+    if (!lm || lm.length < 21) return false;
+
+    // 各指の PIP と Tip インデックス
+    const PIP = { index: 6, middle: 10, ring: 14, pinky: 18 };
+    const TIP = { index: 8, middle: 12, ring: 16, pinky: 20 };
+
+    // 4本の指が曲がっている本数をカウント
+    let curledCount = 0;
+    for (const f of ["index", "middle", "ring", "pinky"]) {
+      if (isFingerCurled(lm, TIP[f], PIP[f])) curledCount++;
+    }
+
+    // 親指がたたまれているか
+    const thumbOk = isThumbFolded(lm);
+
+    // 手の開き度（値が小さいほど握っている）
+    const openness = palmOpenness(lm);
+
+    // 閾値：openness はシーン依存なので、経験的に 0.60 未満を「閉じ気味」とみなす
+    // ※ 必要に応じて環境で微調整してください
+    const isClosedEnough = openness < 0.60;
+
+    // 最終判定：3本以上カール ＆ 親指たたみ込み ＆ 開き度が小さい
+    return curledCount >= 3 && thumbOk && isClosedEnough;
+  };
+
+  // 既存の「手のひら開き」判定も残し、パー側で補強に使う（しきい値やや上げ）
+  const isPalmOpen = useCallback((lm) => {
+    if (!lm || lm.length < 21) return false;
+    return palmOpenness(lm) > 0.75; // 前版0.65→0.75に上げ、誤検出しにくく
+  }, []);
+  const isFistLoose = (lm) => {
+   if (!lm || lm.length < 21) return false;
+   // 2本以上カール ＋ 親指は条件から外す or 弱く見る
+   const PIP = { index: 6, middle: 10, ring: 14, pinky: 18 };
+   const TIP = { index: 8, middle: 12, ring: 16, pinky: 20 };
+   let curled = 0;
+   for (const f of ["index","middle","ring","pinky"])
+     if (isFingerCurled(lm, TIP[f], PIP[f])) curled++;
+   const closed = palmOpenness(lm) < 0.68; // ちょい緩め
+   return (curled >= 2 && closed) || (curled >= 3); // どちらか満たせばOK
+ };
+  // ========== メインループ（推論） ==========
+  const loop = useCallback(async () => {
+    if (!effectiveEnabled) return;
+
+    // フレーム間引き
+    const ts = performance.now();
+    if (ts - lastInferAtRef.current < frameIntervalMs) {
+      rafRef.current = requestAnimationFrame(loop);
+      return;
+    }
+    lastInferAtRef.current = ts;
+
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      // video 準備中はスキップ
+      rafRef.current = requestAnimationFrame(loop);
+      return;
+    }
+
+    try {
+      // ===== 顔検出 =====
+      let faceBoxes = [];
+      if (faceRef.current) {
+        const faces = await faceRef.current.detectForVideo(video, ts);
+        faceBoxes = faces?.detections?.map((d) => d.boundingBox) ?? [];
+      }
+      const faceDetected = faceBoxes.length > 0;
+      setHasFace(faceDetected);
+
+      // ===== ステータス＆自動中断/再開ロジック =====
+      if (timerStateNum === 0) {
+        // 実行中：顔が消えたらカウントダウン→ onAway
+        if (!faceDetected) {
+          if (!awayStartRef.current) awayStartRef.current = Date.now(); // 顔なし開始
+          const remainMs = awayThresholdMs - (Date.now() - awayStartRef.current);
+          setSecondsToPause(Math.max(0, Math.ceil(remainMs / 1000)));
+          setBadge(BADGE.NO_FACE);
+          if (remainMs <= 0) {
+            awayStartRef.current = null;
+            setSecondsToPause(null);
+            lastPausedReasonRef.current = "away"; // ★最後の中断理由を保存
+            onAwayRef.current?.();                // 親へ通知（音は親で再生）
+          }
+        } else {
+          // 顔が戻っている：カウントダウン解除
+          awayStartRef.current = null;
+          setSecondsToPause(null);
+          setBadge(BADGE.ACTIVE);
+        }
+      } else if (timerStateNum === 1) {
+        // 中断中：顔が戻ったら自動再開するか？（※ away 由来のみ）
+        setBadge(faceDetected ? BADGE.ACTIVE : BADGE.IDLE);
+        if (faceDetected && autoResume && lastPausedReasonRef.current === "away" && !inCooldown()) {
+          lastGestureAtRef.current = Date.now();
+          onPalmRef.current?.();           // 自動再開
+          lastPausedReasonRef.current = null; // 使い切り
+        }
+        // カウントダウン表示は不要
+        setSecondsToPause(null);
+        awayStartRef.current = null;
+      } else {
+        // その他状態
+        setBadge(faceDetected ? BADGE.ACTIVE : BADGE.IDLE);
+        setSecondsToPause(null);
+        awayStartRef.current = null;
+      }
+
+      // ===== 手ジェスチャ =====
+      if (handRef.current) {
+        const hands = await handRef.current.detectForVideo(video, ts);
+        const list = hands?.landmarks ?? [];
+
+        // プレビュー用：未検出なら残像クリア
+        lastHandLandmarksRef.current = list?.length ? list : [];
+
+        if (list.length && !inCooldown()) {
+        const isPalm = isPalmOpen(list[0]);
+        const isFist = !isPalm;
+
+        if (isFist && timerStateNum === 0) {
+          lastGestureAtRef.current = Date.now();
+          onFistRef.current?.();  // 中断
+        } else if (isPalm && timerStateNum === 1) {
+          lastGestureAtRef.current = Date.now();
+          onPalmRef.current?.();  // 再開
+        }
+      }
+      }
+
+      // ===== プレビュー描画 =====
+      if (showPreview) {
+        drawOverlay(canvasRef.current, video, faceBoxes, lastHandLandmarksRef.current);
+      }
+    } catch (err) {
+      console.error(err);
+      setBadge(BADGE.ERROR);
+      setReason(String(err?.message || err));
+    }
+
+    // 次フレームへ
+    rafRef.current = requestAnimationFrame(loop);
+  }, [
+    effectiveEnabled,
+    frameIntervalMs,
+    timerStateNum,
+    awayThresholdMs,
+    autoResume,
+    inCooldown,
+    isPalmOpen,
+    drawOverlay,
+    gestureStableFrames,
+  ]);
+
+  // ========== 初期化 / 終了 ==========
+  useEffect(() => {
+    if (!effectiveEnabled) {
+      // OFF または disabled 時は片付けて終了
+      cleanup();
+      return;
+    }
+
+    // 既に初期化済みなら再初期化しない（StrictMode・依存変化対策）
+    if (faceRef.current || handRef.current) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // バッジを INIT（すでに INIT ならそのまま）
+        setBadge((prev) => (prev === BADGE.INIT ? prev : BADGE.INIT));
+        setReason("");
+
+        // MediaPipe の wasm ローダ（CDN）
+        filesetRef.current = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm"
+        );
+
+        // 顔検出（BlazeFace short-range）
+        faceRef.current = await FaceDetector.createFromOptions(filesetRef.current, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite",
+          },
+          runningMode: "VIDEO",
+        });
+
+        // 手ランドマーカ（1手）
+        handRef.current = await HandLandmarker.createFromOptions(filesetRef.current, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+          },
+          runningMode: "VIDEO",
+          numHands: 1,
+        });
+
+        // カメラ起動（フロントカメラ/HD希望）
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: "user",
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        });
+        if (cancelled) return;
+
+        // video にストリームを接続
+        streamRef.current = stream;
+        const video = videoRef.current;
+        if (!video) {
+          setBadge(BADGE.ERROR);
+          setReason("video element not ready");
+          return;
+        }
+        video.srcObject = stream;
+
+        // サイズ情報が取れるまで待機
+        await new Promise((res) => {
+          if (video.readyState >= 1) return res();
+          video.onloadedmetadata = () => res();
+        });
+        await video.play().catch(() => {});
+
+        // 稼働開始
+        setBadge(BADGE.ACTIVE);
+        lastInferAtRef.current = 0;
+        rafRef.current = requestAnimationFrame(loop);
+      } catch (err) {
+        console.error(err);
+        if (
+          err?.name === "NotAllowedError" ||     // 権限拒否
+          err?.name === "NotFoundError"  ||      // カメラなし
+          err?.message?.includes("denied")
+        ) {
+          setBadge(BADGE.BLOCKED);
+        } else {
+          setBadge(BADGE.ERROR);
+        }
+        setReason(String(err?.message || err));
+      }
+    })();
+
+    // アンマウント/無効化時のクリーンアップ
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
+  }, [effectiveEnabled, cleanup, loop]);
+
+  // ========== JSX ==========
   return (
-    <div className="mediapipe-monitor" style={{ display: showPreview ? "block" : "none" }}> {/* showPreview が true の時だけ表示 */}
-      <video
-        ref={videoRef}                                                                // ref: カメラ映像をアタッチする video 要素
-        playsInline                                                                    // playsInline: iOS/Safari 向けインライン再生ヒント
-        muted                                                                          // muted: 自動再生要件を満たすため無音
-        style={{ width: 240, height: 180, background: "#000", borderRadius: 12 }}     // スタイル: 小さめのプレビュー枠
-      />
-      {!ready && <div className="text-muted text-sm">Loading MediaPipe…</div>}        {/* 準備中は簡単な表示 */}
+    <div className="mediapipe-monitor">
+      {/* ON/OFF トグル */}
+      <div className="d-flex align-items-center gap-2 mb-2">
+        <div className="form-check form-switch">
+          <input
+            className="form-check-input"
+            type="checkbox"
+            role="switch"
+            id="monitorSwitch"
+            checked={monitorOn}
+            onChange={(e) => setMonitorOn(e.target.checked)}
+            disabled={!enabled}
+          />
+          <label className="form-check-label" htmlFor="monitorSwitch">
+            カメラ監視 {monitorOn ? "ON" : "OFF"}
+          </label>
+        </div>
+        <span
+          className={`badge text-bg-${
+            status === BADGE.ACTIVE ? "success" :
+            status === BADGE.NO_FACE ? "warning" :
+            status === BADGE.INIT ? "secondary" :
+            status === BADGE.BLOCKED ? "danger" :
+            status === BADGE.ERROR ? "danger" :
+            status === BADGE.DISABLED ? "dark" : "secondary"
+          }`}
+        >
+          {status}
+        </span>
+
+        {/* 顔なし中のカウントダウン（実行中のみ表示） */}
+        {timerStateNum === 0 && secondsToPause !== null && (
+          <span className="ms-2 small text-muted">
+            <strong>{secondsToPause}秒で中断</strong>
+          </span>
+        )}
+
+        {/* エラーやブロックの補足 */}
+        {status === BADGE.ERROR && reason && (
+          <span className="ms-2 text-danger small">{reason}</span>
+        )}
+        {status === BADGE.BLOCKED && (
+          <span className="ms-2 text-danger small">カメラの権限を確認してください。</span>
+        )}
+      </div>
+
+      {/* hidden video：常設（ref はここだけ） */}
+      <video ref={videoRef} playsInline muted style={{ display: "none" }} />
+
+      {/* デバッグ用プレビュー（canvasのみ） */}
+      {showPreview && (
+        <div className="ratio" style={{ width: 320, height: 240 }}>
+          <canvas ref={canvasRef} width={320} height={240} />
+        </div>
+      )}
+
+      {/* ヘルプ（アコーディオン） */}
+      <div className="accordion mt-2" id="mpHelp">
+        <div className="accordion-item">
+          <h2 className="accordion-header" id="mpHelpHead">
+            <button
+              className="accordion-button collapsed"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#mpHelpBody"
+              aria-expanded="false"
+              aria-controls="mpHelpBody"
+            >
+              使い方（カメラ制御のヘルプ）
+            </button>
+          </h2>
+          <div
+            id="mpHelpBody"
+            className="accordion-collapse collapse"
+            aria-labelledby="mpHelpHead"
+            data-bs-parent="#mpHelp"
+          >
+            <div className="accordion-body">
+              <ul className="mb-2">
+                <li>監視ONかつ実行中で、<strong>顔が10秒間検出できない</strong>と自動で中断します。</li>
+                <li><strong>グー＝中断</strong>、<strong>パー＝再開</strong>。（各ジェスチャは連続{gestureStableFrames}フレーム安定した時だけ反応）</li>
+                <li>顔での自動再開は、<strong>顔なしで自動中断された場合のみ</strong>有効です。</li>
+                <li>プレビューは320×240。顔の矩形と手のランドマークをオーバーレイ表示します。</li>
+                <li>停止するにはトグルをOFFにしてください（推論/ストリームも停止）。</li>
+              </ul>
+              <small className="text-muted">
+                前提: HTTPS / localhost、カメラ未占有、十分な明るさと距離。
+              </small>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-  );                                                                                   // コンポーネントの描画終了
+  );
 }
-
-
-// ==========================================================
-// ▼ 既存ファイルへの組み込みメモ（すべてCDN前提 & 各行解説）
-//    File: src/components/Timer/TimerContorl.jsx
-// ==========================================================
-
-// 1) 先頭の import 群の近くに以下を追加（相対パスは配置に合わせて修正）
-// import MediaPipeMonitor from "./MediaPipeMonitor"; // MediaPipeの監視コンポーネントを読み込み
-
-// 2) JSX のボタン群（停止/再開/保存）の少し上に、以下のブロックをそのまま挿入
-// <MediaPipeMonitor
-//   enabled={record?.timer_state !== 3}                 // 保存中(3)は監視不要なのでOFF、それ以外はON
-//   onAway={() => {                                     // 顔不在の自動中断ロジック
-//     if (record?.timer_state === 0) handleSusupend();  // 実行中(0)の時だけ中断APIを叩く
-//   }}
-//   onFist={() => {                                     // グー(Closed_Fist)検出時のトグル
-//     if (record?.timer_state === 0) handleSusupend();  // 実行中なら中断
-//     else if (record?.timer_state === 1) handleContinue(); // 中断中なら再開
-//   }}
-//   awayThresholdMs={10_000}                            // 顔なし10秒で onAway 発火
-//   gestureCooldownMs={1500}                            // グー連続検出の誤作動防止(1.5秒)
-//   minFistScore={0.8}                                   // グー認識の信頼度閾値
-//   frameIntervalMs={66}                                 // 推論フレーム間隔（負荷が高ければ 100~150 に）
-//   showPreview={false}                                  // デバッグ時のみ true（プレビュー表示）
-// />
-
-// 3) 備考
-// - すべてCDN参照のため、npm i @mediapipe/tasks-vision は不要です。
-// - ネットワーク遮断・CDNブロック環境では読み込めません。必要ならローカル同梱版に切替可。
-// - 誤検知が気になる場合は minFistScore を 0.85~0.9 に、
-//   反応が速すぎる場合は gestureCooldownMs を 2000~3000 に上げて調整してください。

@@ -314,6 +314,7 @@ from typing import List
 from cryptography.fernet import Fernet
 import base64
 from django.core.validators import FileExtensionValidator
+from django.db.models import Q, UniqueConstraint
 
 # ------------------------------------------------------------
 # 既存 User を拡張（アカウント種別フラグを追加）
@@ -481,6 +482,16 @@ class Record(models.Model):
     timer_state = models.IntegerField(default=0)
     stop_time = models.DateTimeField(blank=True, null=True)
     team = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True, related_name='records')
+    class Meta:
+        # CO: 既存の ordering などがあれば維持
+        constraints = [
+            # CO: 「timer_state != 2（未確定）」のものは user ごとに1件まで、をDBで保証
+            UniqueConstraint(
+                fields=['user'],
+                condition=~Q(timer_state=2),   # CO: state=2(確定)は除外＝0/1/3が対象
+                name='uniq_active_record_per_user'
+            ),
+        ]
     def __str__(self):
         return f"{self.user.username} - {self.task.name} ({self.duration} min)"
 

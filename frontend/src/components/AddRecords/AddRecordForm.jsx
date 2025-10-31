@@ -7,7 +7,9 @@ import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 import { toast } from 'react-toastify';
 
-function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,subname}) {
+function AddRecordForm({token,onRecordAdded,selectSub = () => {},        // ← no-op デフォルト
+  selectSubName = () => {},    // ← no-op デフォルト
+  sencha,sub,subname}) {
   // Vite のケース
   const API_BASE = import.meta.env.VITE_API_BASE_URL
   const [isLoading, setLoading] = useState(false);
@@ -76,7 +78,7 @@ function AddRecordForm({token,onRecordAdded,selectSub,selectSubName,sencha,sub,s
   useEffect(()=>{
     // トピックに値が入っているなら(id)
     if(formData.subject){
-      selectSub(formData.subject)
+      selectSub?.(formData.subject)
       const Ssname=subjects.filter(sub=>sub.id===formData.subject)
       selectSubName(Ssname[0].name)
       // 引っ張ってきたtaskそれぞれのsubjectと今回のsubjectが一致するもののみfilteredに入れる

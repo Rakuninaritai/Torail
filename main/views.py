@@ -17,6 +17,8 @@ from rest_framework import parsers
 from datetime import timedelta
 from dj_rest_auth.views import UserDetailsView
 from django.utils import timezone
+from django.db import IntegrityError, transaction
+from rest_framework import status
 
 from .models import (
     User, Team, Subject, Task, Record, TeamMembership, TeamInvitation, Integration,
@@ -335,7 +337,69 @@ class RecordViewSet(viewsets.ModelViewSet):
 
     def get_serializer_class(self):
         return RecordWriteSerializer if self.action in ['create','update','partial_update'] else RecordReadSerializer
-    def perform_create(self, serializer): serializer.save(user=self.request.user)
+    # def perform_create(self, serializer): serializer.save(user=self.request.user)
+    
+    @action(detail=False, methods=['get'], url_path='active')
+    def active(self, request):
+        """
+        CO: 現在“未確定（timer_state≠2）”の自分のレコードを1件返す。
+            - グローバルに1件しか存在しないことをDB制約で保証
+            - チーム絞り（?team=<uuid>|null|all）を付けると、UI側の案内用にスコープ一致/不一致を判断できる
+        """
+        user = request.user
+        team_param = request.query_params.get('team')  # CO: 'null' / 'all' / <uuid> / None
+
+        # CO: ベースは自分の“未確定”一式
+        base = (
+            Record.objects
+            .filter(user=user)
+            .exclude(timer_state=2)  # ★ state=2（確定）以外
+            .annotate(
+                sort_key=Coalesce('end_time', 'start_time', Cast('date', DateTimeField()))
+            )  # ★ これが無いと order_by('-sort_key') で落ちる
+        )
+
+        # CO: スコープ条件（UIの警告に使える。グローバルで1件のみなので、返すのは先頭1件）
+        if team_param is not None and str(team_param).lower() == 'null':
+            scoped = base.filter(team__isnull=True)
+        elif team_param == 'all':
+            scoped = base  # CO: そのまま（個人＋所属チーム全体）
+        elif team_param:
+            team = get_object_or_404(Team, id=team_param, memberships__user=user)
+            scoped = base.filter(team=team)
+        else:
+            # CO: UIが単に「今走ってるものを知りたい」場合
+            scoped = base
+
+        rec = scoped.order_by('-sort_key', '-id').first()
+        if not rec:
+            # CO: 存在しない場合は 204 No Content
+            return Response(status=204)
+
+        # CO: 読み取りは RecordReadSerializer で
+        ser = RecordReadSerializer(rec, context={'request': request})
+        return Response(ser.data, status=200)
+
+    def perform_create(self, serializer):
+        """
+        CO: 2重起動に対しては DB 制約に任せつつ、エラーメッセージを親切化
+        """
+        try:
+            with transaction.atomic():          # CO: 競合時に確実に IntegrityError を捕捉
+                serializer.save(user=self.request.user)
+        except IntegrityError:
+            # CO: DB の uniq_active_record_per_user に引っかかった場合
+            raise PermissionDenied("未確定レコードは同時に1件までです。先に確定または停止してください。")
+
+    def perform_update(self, serializer):
+        """
+        CO: 更新でも“未確定化”する変更が重複しないように同じ保護をかける
+        """
+        try:
+            with transaction.atomic():
+                serializer.save()
+        except IntegrityError:
+            raise PermissionDenied("未確定レコードは同時に1件までです。先に確定または停止してください。")
 
 
 # ==== Company & Member & Plan & Hiring ====
