@@ -454,10 +454,27 @@ class RecordWriteSerializer(serializers.ModelSerializer):
 
 # ------------- Company / Member / Plan / Hiring -------------
 class CompanySerializer(serializers.ModelSerializer):
+    slug = serializers.SlugField(required=False, allow_blank=True)  # ← 追加
+
     class Meta:
         model  = Company
-        fields = ['id','name','industry','website','description','logo_url','owner','created_at']
+        fields = ['id','name','slug','industry','website','description','logo_url','owner','created_at']  # ← slug 追加
         read_only_fields = ['owner','created_at']
+
+    def validate_slug(self, v):
+        # 空ならOK（自動生成に任せる）。入ってたら英数小文字とハイフンのみ
+        if not v:
+            return v
+        import re
+        if not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', v):
+            raise serializers.ValidationError("slug は小文字英数とハイフンのみ可です")
+        # 既存重複チェック（自分以外）
+        qs = Company.objects.filter(slug=v)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("この slug はすでに使われています")
+        return v
 
 class CompanyMemberSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
@@ -486,6 +503,20 @@ class CompanyHiringPublicSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompanyHiring
         fields = ['title','detail','tech_stack','location','employment_type','created_at']
+class CandidateBriefSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    username = serializers.CharField()
+    display_name = serializers.CharField()
+    school = serializers.CharField(allow_blank=True, required=False)
+    grade = serializers.CharField(allow_blank=True, required=False)
+    prefecture = serializers.CharField(allow_blank=True, required=False)
+    languages = serializers.ListField(child=serializers.CharField(), required=False)
+    active7 = serializers.IntegerField(required=False)
+    active30 = serializers.IntegerField(required=False)
+    lastRecordAt = serializers.DateTimeField(allow_null=True, required=False)
+    visibility = serializers.CharField(allow_blank=True, required=False)
+    avatar_url = serializers.CharField(allow_blank=True, required=False)
+    fav = serializers.BooleanField(required=False)
 
 
 # ------------- Templates / DM -------------

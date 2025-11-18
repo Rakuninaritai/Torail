@@ -7,30 +7,7 @@ import CandidateList from "../../components/Company/dashboard/CandidateList";
 import "../../components/Company/dashboard/companydash.css";
 import { api } from "../../api";
 
-/** ダミーデータ（バック未接続時の見た目確認用） */
-const allCandidates = [
-  { id:"u1", name:"山本 舟人", school:"HAL名古屋", grade:"3年", region:"東海",
-    streakCurrent:8, streakMax:21, lastRecordAt:"2025-09-28 22:10",
-    active7:6, active30:22, visibility:"企業のみ",
-    languages:["Python","TypeScript","C"], fav:false,
-    heat:[1,2,0,3,1,0,4,1,2,3,0,1,0,2,3,0,0,1,2,1,4,1,2,0,2,3,1,0,2],
-    createdAt:"2025-08-22",
-  },
-  { id:"u2", name:"伊藤 羽琉", school:"HAL名古屋", grade:"3年", region:"東海",
-    streakCurrent:3, streakMax:9, lastRecordAt:"2025-09-27 19:20",
-    active7:4, active30:15, visibility:"全体公開",
-    languages:["JavaScript","Python","Go"], fav:true,
-    heat:[0,1,2,2,0,1,3,0,2,1,0,1,3,2,0,0,1,2,1,0,2,3,1,0,2,2,0,1,0],
-    createdAt:"2025-09-05",
-  },
-  { id:"u3", name:"佐藤 凛", school:"XX大学", grade:"4年", region:"関東",
-    streakCurrent:12, streakMax:30, lastRecordAt:"2025-09-29 08:10",
-    active7:7, active30:25, visibility:"企業のみ",
-    languages:["Go","TypeScript","Python"], fav:false,
-    heat:[3,2,2,4,3,3,4,2,3,3,4,2,3,2,4,3,2,4,3,4,4,2,3,2,3,4,3,4,3],
-    createdAt:"2025-07-30",
-  },
-];
+
 
 export default function CompanyDashboardPage() {
   const navigate = useNavigate();
@@ -39,6 +16,29 @@ export default function CompanyDashboardPage() {
   const [companies, setCompanies] = useState(null); // null=読込中, []=未所属
   const [creating, setCreating] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
+  // ─────────────────────────────────────────────
+  // まず最初に「検索に関わる state」を宣言（TDZ回避）
+  // ─────────────────────────────────────────────
+  const [plan] = useState({ type: "無料", note: "検索のみ/スカウト不可" });
+  const [filters, setFilters] = useState({
+    languages: [],
+    recentActiveDays: null,
+    currentStreakMin: null,
+    maxStreakMin: null,
+    grade: "",
+    region: "",
+    visibility: "",
+    sort: "直近アクティブ度", // FiltersBar側の初期値と合わせる
+    q: "",
+  });
+  const [saved, setSaved] = useState([
+    { name: "Python×ストリーク≧3" },
+    { name: "新着・全体公開" },
+  ]);
+  const [page, setPage] = useState(1);
+  const pageSize = 6;
+  const [items, setItems] = useState([]); // 検索結果
+  const [total, setTotal] = useState(0);  // 総件数
 
   useEffect(() => {
     let ignore = false;
@@ -52,34 +52,116 @@ export default function CompanyDashboardPage() {
     })();
     return () => { ignore = true; };
   }, []);
-
-  // ---- ここから下は「所属あり」のとき従来UI ----
-  const [plan] = useState({ type: "無料", note: "検索のみ/スカウト不可" });
-  const [filters, setFilters] = useState({
-    languages: [], recentActiveDays: null, currentStreakMin: null, maxStreakMin: null,
-    grade: "", region: "", visibility: "", sort: "直近アクティブ度",
-  });
-  const [saved, setSaved] = useState([{ name: "Python×ストリーク≧3" }, { name: "新着・全体公開" }]);
-  const [page, setPage] = useState(1);
-  const pageSize = 6;
-
-  const data = useMemo(() => {
-    let arr = [...allCandidates];
-    if (filters.languages.length) arr = arr.filter(c => filters.languages.every(l => c.languages.includes(l)));
-    if (filters.recentActiveDays != null) arr = arr.filter(c => c.active30 >= filters.recentActiveDays);
-    if (filters.currentStreakMin != null) arr = arr.filter(c => c.streakCurrent >= filters.currentStreakMin);
-    if (filters.maxStreakMin != null) arr = arr.filter(c => c.streakMax >= filters.maxStreakMin);
-    if (filters.grade) arr = arr.filter(c => c.grade === filters.grade);
-    if (filters.region) arr = arr.filter(c => c.region === filters.region);
-    if (filters.visibility) arr = arr.filter(c => c.visibility === filters.visibility);
-    switch (filters.sort) {
-      case "現在ストリーク（降順）": arr.sort((a,b)=> b.streakCurrent - a.streakCurrent); break;
-      case "最終記録日時": arr.sort((a,b)=> new Date(b.lastRecordAt) - new Date(a.lastRecordAt)); break;
-      case "新着": arr.sort((a,b)=> new Date(b.createdAt) - new Date(a.createdAt)); break;
-      default: arr.sort((a,b)=> b.active7 - a.active7 || b.active30 - a.active30);
+  // ─────────────────────────────────────────────
+  // クエリビルド（filters → API のクエリ文字列）
+  // ─────────────────────────────────────────────
+  const buildQuery = (f) => {
+    const params = new URLSearchParams();
+    if (f.languages?.length) {
+      // LanguageMaster の slug を保存していれば slug で、なければ name を; 今回は name を小文字化
+      params.set("languages", f.languages.map(s=>s.toLowerCase()).join(","));
     }
-    return arr;
+    if (f.grade) params.set("grade", f.grade);
+    if (f.region) params.set("pref", f.region);
+    if (f.q) params.set("q", f.q);
+    // 並び替え
+    if (f.sort === "現在ストリーク（降順）") params.set("sort", "active7");  // ストリーク近似=直近活性
+    else if (f.sort === "新着") params.set("sort", "new");
+    else if (f.sort === "最終記録日時") params.set("sort", "recent");
+    else params.set("sort", "active7");
+    return params.toString();
+  };
+
+  // ─────────────────────────────────────────────
+  // 検索実行（filters/page を使って API から取得）
+  // ─────────────────────────────────────────────
+  const runSearch = async (pageNum = 1, f) => {
+    // safety: f 未指定なら現在の filters
+    f = f ?? filters;
+    const qs = buildQuery(f);
+   try {
+    // --- まず本命エンドポイント ---
+    const res = await api(`/companies/candidates/?page=${pageNum}&${qs}`, { method: "GET" });
+    const list = res?.results || res || [];
+    setItems(list.map(c => ({
+      id: c.user_id,                              // ← user_id を持たせる
+      name: c.display_name,
+      username: c.username,
+      school: c.school || "",
+      grade: c.grade || "",
+      region: c.prefecture || "",
+      languages: c.languages || [],
+      active7: c.active7 || 0,
+      active30: c.active30 || 0,
+      lastRecordAt: c.lastRecordAt || "",
+      visibility: c.visibility,
+      fav: !!c.fav, // バックがあれば反映、なければ false
+      // heat は KPI 詳細APIで後追い取得。ここでは省略/仮置き
+      heat: [],
+      avatarUrl: c.avatar_url || ""
+    })));
+    setTotal(res?.count ?? list.length);
+    return;
+    } catch (e) {
+      // 404 など → フォールバック（既存のプロフィール検索APIがあれば差し替え）
+      if (e?.status === 404) {
+        try {
+          // 例：/profiles/search/（存在するならここに合わせてください）
+          const res2 = await api(`/profiles/search/?page=${pageNum}&${qs}`, { method: "GET" });
+          const list2 = res2?.results || res2 || [];
+          setItems(list2.map(p => ({
+            id: p.user_id,
+            name: p.display_name,
+            username: p.username,
+            school: p.school || "",
+            grade: p.grade || "",
+            region: p.prefecture || "",
+            languages: p.languages || [],
+            active7: p.active7 || 0,
+            active30: p.active30 || 0,
+            lastRecordAt: p.last_record_at || "",
+            visibility: p.visibility,
+            fav: !!p.fav,
+            avatarUrl: p.avatar_url || "",
+            heat: [],
+          })));
+          setTotal(res2?.count ?? list2.length);
+          return;
+        } catch (e2) {
+          // それも無ければ空表示＋トースト
+          setItems([]);
+          setTotal(0);
+          // お好みで toast を出す
+          // toast.info("候補者検索APIが未実装のため、結果は空です。バックエンド側に /companies/candidates/ を追加してください。");
+          return;
+        }
+      }
+      // その他エラー
+      throw e;
+    }
+  };
+
+  // フィルタが変わったら 1 ページ目から検索
+  useEffect(() => {
+    setPage(1);
+    runSearch(1, filters);
   }, [filters]);
+
+  // ページ変更時は現在の filters で検索
+  useEffect(() => {
+    runSearch(page, filters);
+  }, [page]);
+
+  // ----- ハンドラ
+  const onProfile = (c) => navigate(`/mypage/${encodeURIComponent(c.username)}`);
+  const onScout   = (c) => navigate(`/company/scout?to=${encodeURIComponent(c.username)}&uid=${encodeURIComponent(c.id)}`);
+
+
+
+  
+
+  // （クライアント側のみでの並び替え・絞り込みをやるならここで items を加工。
+  //  ただし今回はサーバ検索前提なので items をそのまま CandidateList に渡す）
 
   const onSaveCond = () => {
     const label = [
@@ -91,12 +173,9 @@ export default function CompanyDashboardPage() {
   };
 
   const onRemoveSaved = (idx) => setSaved(prev => prev.filter((_,i)=>i!==idx));
-  const onProfile = (c) => navigate(`/mypage/${encodeURIComponent(c.name)}`); // 後で username に差し替え
-  const onScout   = (c) => navigate(`/company/scout?to=${encodeURIComponent(c.name)}`);
   const onToggleFav = (c) => {
-    const i = allCandidates.findIndex(x=>x.id===c.id);
-    if (i>=0) { allCandidates[i].fav = !allCandidates[i].fav; }
-    setPage(p=>p); // 再描画
+    // API があれば POST/DELETE → 成功時に反映
+    setItems(prev => prev.map(x => x.id === c.id ? { ...x, fav: !x.fav } : x));
   };
 
   // ---- 分岐描画 ----
@@ -187,7 +266,7 @@ export default function CompanyDashboardPage() {
       <SavedSearches items={saved} onRemove={onRemoveSaved} plan={plan} />
 
       <CandidateList
-        items={data}
+        items={items}
         plan={plan}
         onProfile={onProfile}
         onScout={onScout}
@@ -195,6 +274,7 @@ export default function CompanyDashboardPage() {
         page={page}
         pageSize={pageSize}
         onPage={setPage}
+        total={total}
       />
     </main>
   );

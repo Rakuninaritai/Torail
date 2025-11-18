@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404
-from django.db.models import Q
+from django.db.models import Q,Max,Count
 from django.db.models.functions import Coalesce, Cast
 from django.db.models import DateTimeField
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
@@ -19,13 +19,14 @@ from dj_rest_auth.views import UserDetailsView
 from django.utils import timezone
 from django.db import IntegrityError, transaction
 from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 
 from .models import (
     User, Team, Subject, Task, Record, TeamMembership, TeamInvitation, Integration,
     LanguageMaster, UserProfile, UserSNS, PortfolioItem,
     JobRole, TechArea, ProductDomain,
     Company, CompanyMember, CompanyPlan, CompanyHiring,
-    MessageTemplate, DMThread, DMMessage
+    MessageTemplate, DMThread, DMMessage,UserProfile
 )
 from .serializers import (
     UserSerializer, SubjectSerializer, TaskSerializer, RecordReadSerializer, RecordWriteSerializer,
@@ -33,7 +34,7 @@ from .serializers import (
     LanguageMasterSerializer, UserProfileSerializer, UserProfileWriteSerializer, UserSNSSerializer, PortfolioItemSerializer,
     JobRoleSerializer, TechAreaSerializer, ProductDomainSerializer,
     CompanySerializer, CompanyMemberSerializer, CompanyPlanSerializer, CompanyHiringSerializer,
-    MessageTemplateSerializer, DMThreadSerializer, DMMessageSerializer,CompanyHiringPublicSerializer,CompanyPublicSerializer
+    MessageTemplateSerializer, DMThreadSerializer, DMMessageSerializer,CompanyHiringPublicSerializer,CompanyPublicSerializer,CandidateBriefSerializer
 )
 # 当該を返す
 class PatchedUserDetailsView(UserDetailsView):
@@ -492,6 +493,122 @@ class CompanyHiringViewSet(viewsets.ModelViewSet):
         if not CompanyMember.objects.filter(company=company, user=self.request.user).exists():
             raise PermissionDenied("会社メンバーのみ作成できます")
         serializer.save()
+
+class CandidateSearchPagination(PageNumberPagination):
+    page_size = 12
+    page_size_query_param = "page_size"
+    max_page_size = 50
+class CandidateSearchView(APIView):
+     permission_classes = [IsAuthenticated]
+
+     def get(self, request):
+         qs = UserProfile.objects.select_related("user").prefetch_related("languages")
+
+         # 企業から見えるのは公開のみ
+         qs = qs.filter(is_public=True)
+
+         # --- filters ---
+         langs = request.GET.get("languages")
+         if langs:
+             arr = [s.strip().lower() for s in langs.split(",") if s.strip()]
+             if arr:
+                 qs = qs.filter(languages__name__in=arr).distinct()
+
+         grade = request.GET.get("grade")
+         if grade:
+             qs = qs.filter(grade=grade)
+
+         pref = request.GET.get("pref")
+         if pref:
+             qs = qs.filter(prefecture=pref)
+
+         q = request.GET.get("q")
+         if q:
+             q = q.strip()
+             qs = qs.filter(
+                 Q(username__icontains=q) |
+                 Q(display_name__icontains=q) |
+                 Q(school__icontains=q)
+             )
+
+         # --- activity 集計 ---
+         qs = qs.annotate(
+             last_record_at=Max("user__record__end_time"),
+             active7_count=Count(
+                 "user__record",
+                 filter=(
+                     Q(user__record__end_time__gte=self._days_ago(7)) |
+                     Q(user__record__start_time__gte=self._days_ago(7)) |
+                     Q(user__record__date__gte=self._days_ago_date(7))
+                 ),
+                 distinct=True,
+             ),
+             active30_count=Count(
+                 "user__record",
+                 filter=(
+                     Q(user__record__end_time__gte=self._days_ago(30)) |
+                     Q(user__record__start_time__gte=self._days_ago(30)) |
+                     Q(user__record__date__gte=self._days_ago_date(30))
+                 ),
+                 distinct=True,
+             ),
+         )
+
+         # --- sort ---
+         sort = request.GET.get("sort") or "active7"
+         if sort == "recent":
+             qs = qs.order_by("-last_record_at", "-id")
+         elif sort == "new":
+             qs = qs.order_by("-user__date_joined", "-id")
+         else:
+             qs = qs.order_by("-active7_count", "-active30_count", "-id")
+
+         # --- paginate ---
+         paginator = CandidateSearchPagination()
+         page = paginator.paginate_queryset(qs, request)
+
+         def _abs_avatar_url(p: UserProfile):
+             # ImageField の絶対URL化
+             if getattr(p, "avatar", None) and hasattr(p.avatar, "url"):
+                 try:
+                     return request.build_absolute_uri(p.avatar.url)
+                 except Exception:
+                     return p.avatar.url
+             return ""
+
+         def _row(p: UserProfile):
+             langs = list(p.languages.values_list("name", flat=True))
+             return {
+                 "user_id": p.user.id,
+                 "username": p.user.username,
+                 "display_name": p.display_name or p.user.username,
+                 "school": p.school or "",
+                 "grade": p.grade or "",
+                 "prefecture": p.prefecture or "",
+                 "languages": langs,
+                 "active7": getattr(p, "active7_count", 0),
+                 "active30": getattr(p, "active30_count", 0),
+                 "lastRecordAt": getattr(p, "last_record_at", None),
+                 # 一覧は公開のみ返しているので文字列で固定返却
+                 "visibility": "public",
+                 "avatar_url": _abs_avatar_url(p),
+                 "fav": False,
+             }
+
+         data = [_row(p) for p in page]
+         ser = CandidateBriefSerializer(data, many=True)
+         return paginator.get_paginated_response(ser.data)
+
+     @staticmethod
+     def _days_ago(n):
+         from django.utils import timezone
+         return timezone.now() - timezone.timedelta(days=n)
+
+     @staticmethod
+     def _days_ago_date(n):
+         from django.utils import timezone
+         return (timezone.now() - timezone.timedelta(days=n)).date()
+
 
 class PublicCompanyView(APIView):
     permission_classes = [AllowAny]

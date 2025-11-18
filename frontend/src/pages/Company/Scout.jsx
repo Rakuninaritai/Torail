@@ -1,53 +1,127 @@
-import React, { useState } from "react";
+import React, { useState,useEffect, useMemo } from "react";
 import ScoutCompose from "../../components/Company/scout/ScoutCompose";
 import ScoutHistory from "../../components/Company/scout/ScoutHistory";
 import ScoutTemplates from "../../components/Company/scout/ScoutTemplates";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { api } from "../../api";
 
 export default function ScoutsPage({ initialUser }) {
   const [tab, setTab] = useState("compose");
   const [conversations, setConversations] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
 
-  const [templates, setTemplates] = useState([
-    {
-      name: "カジュアル面談",
-      subject: "{ユーザー名}さん、まずはカジュアルにお話ししませんか？",
-      body: "{ユーザー名}さん、継続が素晴らしいですね！ぜひお話させてください。",
-    },
-    {
-      name: "長期インターン",
-      subject: "{ユーザー名}さん、長期インターンのご案内",
-      body: "弊社での長期インターンにご興味ありませんか？",
-    },
-  ]);
+  // テンプレをAPIから
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const res = await api("/templates/", { method:"GET" });
+        const list = res?.results || res || [];
+        setTemplates(list.map(t => ({ id:t.id, name:t.name, subject:t.subject, body:t.body })));
+      }catch(e){ /* 初回は空でもOK */ }
+    })();
+  },[]);
+  // ▼ 選択中スレッド（履歴タブで右側に表示）
+  const selected = useMemo(
+    () => conversations.find(c => c.id === selectedId) || null,
+    [conversations, selectedId]
+  );
+  // ▼ テンプレ保存（テンプレ管理タブから来る）
+  const handleSaveTemplate = (tpl) => {
+    // tpl: { name, subject, body } 想定
+    setTemplates(prev => [...prev, { ...tpl, id: crypto.randomUUID?.() || Date.now() }]);
+  };
 
-  const handleSend = (s) => setConversations([s, ...conversations]);
-  const handleUpdateStatus = (id, status) =>
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status } : c))
+  // 送信ハンドラ（スレッド作成→メッセージ投稿）
+  const sendScout = async ({ toUserId, subject, body }) => {
+    // 1) 所属会社の取得（1社想定）
+    const comps = await api("/companies/", { method:"GET" });
+    const company = (comps?.results || comps || [])[0];
+    if (!company) { alert("会社がありません。まず会社を作成してください。"); return; }
+
+    // 2) 既存スレッドがあれば流用、なければ作成
+    //    API設計上、重複は unique_together(company, user) でDB側保護
+    let threadId = null;
+    try{
+      const created = await api("/dm/threads/", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ company: company.id, user: toUserId })
+      });
+      threadId = created.id;
+    }catch(e){
+      // 既存を検索
+      const list = await api(`/dm/threads/?company=${company.id}`, { method:"GET" });
+      const exist = (list?.results || list || []).find(th => String(th.user) === String(toUserId));
+      if (!exist) throw e;
+      threadId = exist.id;
+    }
+
+    // 3) メッセージ送信
+    await api("/dm/messages/", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ thread: threadId, subject: subject||"", body })
+    });
+
+    // UI更新（簡易）
+    setConversations(prev => [{
+      id: threadId,
+      toUserId,
+      status: "送信済み",
+      messages: [{ from:"company", text: body, date: new Date().toLocaleString() }],
+    }, ...prev]);
+
+    alert("送信しました。学生側のスカウトBOXに届きます。");
+    setTab("history");
+  };
+
+  // ScoutCompose から呼ばれる onSend を差し替え
+  const handleSend = async (state) => {
+    // state: { toUserName, subject, body, ... }
+    const uid = params.get("uid");
+    const username = params.get("to") || initialUser || state.toUserName;
+    if (!uid) { alert("候補者IDがありません（ダッシュボードから遷移してください）"); return; }
+    await sendScout({ toUserId: uid, subject: state.subject, body: state.body });
+  };
+  // ──────────────────────────────────────────────
+  // ステータス更新（履歴リストのドロップダウン等から呼ばれる想定）
+  // usage: onUpdateStatus(id, "返信あり" | "既読" | "未読" | "辞退" ...)
+  const handleUpdateStatus = (id, status) => {
+    setConversations(prev =>
+      prev.map(c => (c.id === id ? { ...c, status } : c))
     );
-  const handleReply = (id, text) =>
-    setConversations((prev) =>
-      prev.map((c) =>
+  };
+
+  // 返信（右ペインの返信ボタン等から呼ばれる想定）
+  // usage: onReply(id, "本文テキスト")
+  const handleReply = (id, text) => {
+    setConversations(prev =>
+      prev.map(c =>
         c.id === id
           ? {
               ...c,
               status: "返信あり",
               messages: [
-                ...c.messages,
+                ...(c.messages || []),
                 { from: "company", text, date: new Date().toLocaleString() },
               ],
             }
           : c
       )
     );
-  const handleSaveTemplate = (tpl) => setTemplates([...templates, tpl]);
-  const handleDeleteTemplate = (i) =>
-    setTemplates(templates.filter((_, idx) => idx !== i));
+  };
 
-  const selected = conversations.find((c) => c.id === selectedId);
+  // テンプレ削除（テンプレ管理タブ）
+  // usage: onDelete(indexNumber)
+  const handleDeleteTemplate = (index) => {
+    setTemplates(prev => prev.filter((_, i) => i !== index));
+  };
+  // ──────────────────────────────────────────────
 
   return (
     <main className="container-xxl pb-5" style={{ height: "85vh" }}>
@@ -85,7 +159,7 @@ export default function ScoutsPage({ initialUser }) {
       </ul>
 
       {tab === "compose" && (
-        <ScoutCompose onSend={handleSend} toUser={initialUser} templates={templates} />
+         <ScoutCompose onSend={handleSend} toUser={params.get("to") || initialUser} templates={templates} />
       )}
 
       {tab === "history" && (

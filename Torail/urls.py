@@ -160,7 +160,7 @@ from main.views import (
     UserSNSViewSet, PortfolioItemViewSet,
     CompanyViewSet, CompanyMemberViewSet, CompanyPlanViewSet, CompanyHiringViewSet,
     MessageTemplateViewSet, DMThreadViewSet, DMMessageViewSet,PublicProfileByNameView,
-    PublicActivityKPIByNameView,PublicCompanyView,MyDMThreadsSummary,DMThreadDetailView,CompanyMemberInviteView,PatchedUserDetailsView
+    PublicActivityKPIByNameView,PublicCompanyView,MyDMThreadsSummary,DMThreadDetailView,CompanyMemberInviteView,PatchedUserDetailsView,CandidateSearchView
 )
 
 # ---- 既存と同様の補助関数/ビュー（省略） ----
@@ -233,7 +233,7 @@ urlpatterns = [
     path('api/auth/user/', PatchedUserDetailsView.as_view(), name='rest_user_details'),
     path('api/auth/',          include('dj_rest_auth.urls')),
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
-    path('api/',               include(router.urls)),
+    # path('api/',               include(router.urls)),
     # Cookie-JWT
     path('api/token/',         CookieTokenObtainPairView.as_view(),  name='token_obtain_pair'),
     path('api/token/refresh/', CookieTokenRefreshView.as_view(),     name='token_refresh'),
@@ -255,6 +255,7 @@ urlpatterns = [
     path('api/dm/threads/summary/', MyDMThreadsSummary.as_view()),       # 学生一覧
     path('api/dm/threads/<uuid:thread_id>/detail/', DMThreadDetailView.as_view()),
     path('api/companies/<uuid:company_id>/invite_by_email/', CompanyMemberInviteView.as_view()),
+    path('api/companies/candidates/', CandidateSearchView.as_view()),
 
     # 既存 & 新規のViewSet群
     path('api/', include(router.urls)),
