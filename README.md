@@ -50,7 +50,7 @@
 ## 動作環境
 
 * **Python** 3.10+
-* **Node.js** 16+
+* **Django** 
 * **Conda**（推奨）
 * **PostgreSQL** 13+
 
