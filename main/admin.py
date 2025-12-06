@@ -6,6 +6,7 @@ from .models import (
     JobRole, TechArea, ProductDomain,
     Company, CompanyMember, CompanyPlan, CompanyHiring,
     MessageTemplate, DMThread, DMMessage
+    , Order, CompanySubscription
 )
 
 User = get_user_model()
@@ -162,4 +163,16 @@ class DMMessageAdmin(admin.ModelAdmin):
     list_filter = ('sender','is_read_by_company','is_read_by_user')
     search_fields = ('subject','body','thread__company__name','thread__user__username')
     autocomplete_fields = ('thread',)
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'company', 'amount', 'currency', 'paid', 'created_at')
+    list_filter = ('paid', 'currency')
+    search_fields = ('stripe_session_id', 'stripe_payment_intent_id', 'user__username', 'company__name')
+    autocomplete_fields = ('user','company')
+@admin.register(CompanySubscription)
+class CompanySubscriptionAdmin(admin.ModelAdmin):
+    list_display = ("stripe_subscription_id", "company", "status", "current_period_end", "created_at")
+    search_fields = ("stripe_subscription_id", "company__name")
 

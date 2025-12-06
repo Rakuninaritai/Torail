@@ -1,7 +1,7 @@
 import React from "react";
 import "./scoutbox.css";
 
-export default function ScoutFilters({ value, onChange }) {
+export default function ScoutFilters({ value, onChange, onSearch }) {
   const v = value;
   const set = (k, val) => onChange?.({ ...v, [k]: val });
 
@@ -26,7 +26,6 @@ export default function ScoutFilters({ value, onChange }) {
             <option>すべて</option>
             <option>未読</option>
             <option>既読</option>
-            <option>返信あり</option>
             <option>辞退</option>
           </select>
         </div>
@@ -48,7 +47,7 @@ export default function ScoutFilters({ value, onChange }) {
           </select>
         </div>
         <div className="col-6 col-lg-2 d-grid">
-          <button className="btn btn-primary" onClick={()=>onChange?.({...v})}>
+          <button className="btn btn-primary" onClick={()=>{ if(onSearch) onSearch(v); else onChange?.({...v}); }}>
             <i className="bi bi-funnel" /> 絞り込む
           </button>
         </div>

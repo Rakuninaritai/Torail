@@ -12,8 +12,13 @@ export default function SavedSearches({ items, onRemove, plan }) {
           </button>
         </span>
       ))}
+      {/* プラン表示エリア
+          - plan が null の場合: 「読込中...」と表示
+          - plan が存在: plan_type（'free'/'pro'/'enterprise'）を表示
+          - 将来的に plan.note のような説明を追加するときはここに追加
+      */}
       <span className="ms-auto subtle">
-        プラン: <strong>{plan.type}</strong>（{plan.note}）
+        プラン: <strong>{plan ? plan.plan_type || 'Free' : '読込中...'}</strong>
       </span>
     </div>
   );

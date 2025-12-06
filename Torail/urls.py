@@ -162,6 +162,9 @@ from main.views import (
     MessageTemplateViewSet, DMThreadViewSet, DMMessageViewSet,PublicProfileByNameView,
     PublicActivityKPIByNameView,PublicCompanyView,MyDMThreadsSummary,DMThreadDetailView,CompanyMemberInviteView,PatchedUserDetailsView,CandidateSearchView
 )
+from main.views import MarkThreadReadView
+from main.views import UsernameSearchView
+from main.views import create_checkout_session, stripe_webhook, retrieve_checkout_session
 
 # ---- 既存と同様の補助関数/ビュー（省略） ----
 from django.conf import settings
@@ -254,8 +257,13 @@ urlpatterns = [
     path('api/public/companies/<slug:slug>/', PublicCompanyView.as_view()),
     path('api/dm/threads/summary/', MyDMThreadsSummary.as_view()),       # 学生一覧
     path('api/dm/threads/<uuid:thread_id>/detail/', DMThreadDetailView.as_view()),
+    path('api/dm/threads/<uuid:thread_id>/mark_read/', MarkThreadReadView.as_view()),
+    path('api/stripe/create-checkout-session/', create_checkout_session),
+    path('api/stripe/webhook/', stripe_webhook),
+    path('api/stripe/session/', retrieve_checkout_session),
     path('api/companies/<uuid:company_id>/invite_by_email/', CompanyMemberInviteView.as_view()),
     path('api/companies/candidates/', CandidateSearchView.as_view()),
+    path('api/users/search_by_username/', UsernameSearchView.as_view()),
 
     # 既存 & 新規のViewSet群
     path('api/', include(router.urls)),

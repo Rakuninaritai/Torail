@@ -414,6 +414,8 @@ class UserProfile(models.Model):
 
     # 公開設定（今回は全部グローバル想定。将来拡張用に保持）
     is_public = models.BooleanField(default=True)
+    # 追加: 卒業年度（例: '27卒'）
+    grad_year = models.CharField(max_length=8, blank=True, default="")
 
     def __str__(self):
         return f"Profile({self.user.username})"
@@ -508,6 +510,9 @@ class Company(models.Model):
     website  = models.URLField(blank=True, default="")
     description = models.TextField(blank=True, default="")
     logo_url = models.URLField(blank=True, default="")
+    # 公開設定: 会社ページ自体を公開するか、公開ページで募集情報を表示するか
+    is_public = models.BooleanField(default=True)
+    show_hirings = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self): return self.name
     def save(self, *a, **kw):
@@ -541,6 +546,87 @@ class CompanyPlan(models.Model):
     price_jpy = models.IntegerField(default=0)
     active_from = models.DateField()
     active_to   = models.DateField(null=True, blank=True)
+    # 追加: 残り件数を保持するフィールド。NULL 許容で、未設定時は monthly_quota を初期値としてセットします。
+    remaining = models.IntegerField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        # 初期作成時に remaining が未設定なら monthly_quota を初期値として設定
+        if self.remaining is None:
+            try:
+                self.remaining = int(self.monthly_quota)
+            except Exception:
+                self.remaining = 0
+        return super().save(*args, **kwargs)
+    class Meta:
+        # デフォルトの並び順を開始日の降順（最新が先頭）にする
+        ordering = ['-active_from']
+
+class Order(models.Model):
+    """
+    Stripe 決済のための簡易オーダーモデル
+
+    解説（用途）:
+    - フロントエンドが Checkout セッションを作成するときにサーバ側で stub を残すために使います。
+      （Checkout セッション ID を保存しておき、後続の webhook で支払い完了を結び付けるため）
+    - subscription / one-time のどちらでも利用可能。company がある場合は企業課金に紐付けます。
+
+    Stripe マッピング:
+    - `stripe_session_id` は Stripe Checkout Session の ID（例: cs_test_...）
+    - `stripe_payment_intent_id` は 支払いが即時発生する PaymentIntent の ID（存在する場合）
+    - webhook 側で session / payment_intent を参照して `paid=True` に更新します
+
+    実装上の注意:
+    - 金額の canonical source は Stripe 側なので amount=0 で stub を作ることもあります。
+    - セキュリティ上、Webhook は Stripe の署名で検証してから状態変更してください。
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='orders')
+    company = models.ForeignKey('Company', null=True, blank=True, on_delete=models.SET_NULL, related_name='orders')
+    amount = models.IntegerField()
+    currency = models.CharField(max_length=10, default='jpy')
+    stripe_session_id = models.CharField(max_length=255, blank=True, null=True)
+    stripe_payment_intent_id = models.CharField(max_length=255, blank=True, null=True)
+    paid = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Order {self.id} - {self.amount} {self.currency} - paid:{self.paid}"
+
+
+class CompanySubscription(models.Model):
+    """
+    企業のサブスクリプション情報を保存するモデル
+
+    解説（用途）:
+    - Stripe の subscription（サブスク）をサーバ側で参照・保持するためのモデル。
+    - webhook イベント（checkout.session.completed / invoice.payment_succeeded 等）で
+      subscription のステータスや次回課金期間を更新します。
+
+    主なフィールド:
+    - `stripe_subscription_id`: Stripe 側の subscription ID（例: sub_...）を一意キーとして保持
+    - `price_id`: Checkout に渡した Price ID（price_...）。請求対象のプラン識別に便利
+    - `status`: 'active' / 'past_due' / 'canceled' など Stripe のステータスを保存
+    - `current_period_end`: 次回請求の終了（期間終了）日時を保持（UI 表示や有効判定に使用）
+
+    実装上の注意:
+    - Stripe の真の状態は常に Stripe API が正。DB はキャッシュ的に扱い、重要な判定は
+      Stripe API を参照するか webhook の状態を元に更新すること。
+    - webhook の署名検証を必ず行ってください（STRIPE_WEBHOOK_SECRET を設定）。
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='subscriptions')
+    stripe_subscription_id = models.CharField(max_length=255, unique=True)
+    price_id = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(max_length=50, blank=True, null=True)
+    current_period_end = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Subscription {self.stripe_subscription_id} ({self.company.name})"
 
 class CompanyHiring(models.Model):
     """

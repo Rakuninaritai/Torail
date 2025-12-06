@@ -1,7 +1,7 @@
 import React from "react";
 
 export default function ScoutList({ conversations, selectedId, onSelect, filter, query }) {
-  const filtered = conversations.filter((c) => {
+    const filtered = conversations.filter((c) => {
     const matchQuery =
       !query ||
       c.toUser.includes(query) ||
@@ -32,9 +32,7 @@ export default function ScoutList({ conversations, selectedId, onSelect, filter,
             <div className="text-truncate small">{c.subject}</div>
             <span
               className={`badge mt-1 ${
-                c.status === "返信あり"
-                  ? "text-bg-success"
-                  : c.status === "辞退"
+                c.status === "辞退"
                   ? "text-bg-secondary"
                   : c.status === "既読"
                   ? "text-bg-info"

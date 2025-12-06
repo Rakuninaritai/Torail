@@ -30,10 +30,20 @@ export default function CandidateCard({ data, plan, onProfile, onScout, onToggle
         </div>
         <div className="ms-auto d-flex gap-2">
           <button className="btn btn-outline-secondary btn-sm" onClick={()=>onProfile?.(data)}><i className="bi bi-person-vcard" /> プロフィール</button>
-          {plan.type === "有料" ? (
-            <button className="btn btn-primary btn-sm" onClick={()=>onScout?.(data)}><i className="bi bi-send" /> スカウトへ</button>
+          {/* プラン別のスカウトボタン制御
+              - plan が null: 読込中のため disabled
+              - plan.plan_type が 'free': 無料プラン → アラートを表示
+              - plan.plan_type が 'pro' または 'enterprise': 有料 → スカウト送信可能
+              - plan.remaining が 0 以下: 上限到達 → 送信不可
+          */}
+          {!plan ? (
+            <button className="btn btn-primary btn-sm" disabled><i className="bi bi-send" /> 読込中...</button>
+          ) : plan.plan_type === "free" ? (
+            <button className="btn btn-primary btn-sm" onClick={()=>alert("無料プランではDM送信はできません。プラン設定をご確認ください。")}><i className="bi bi-send" /> DM送信</button>
+          ) : plan.remaining !== undefined && plan.remaining <= 0 ? (
+            <button className="btn btn-primary btn-sm" onClick={()=>alert("送信可能な残り件数がありません。プランを確認してください。")} disabled><i className="bi bi-send" /> DM送信</button>
           ) : (
-            <button className="btn btn-primary btn-sm" onClick={()=>alert("無料プランではスカウト送信はできません。プラン設定をご確認ください。")}><i className="bi bi-send" /> スカウトへ</button>
+            <button className="btn btn-primary btn-sm" onClick={()=>onScout?.(data)}><i className="bi bi-send" /> DM送信</button>
           )}
           <button className="btn btn-outline-warning btn-sm" onClick={()=>onToggleFav?.(data)} aria-pressed={data.fav}>
             <i className={data.fav ? "bi bi-star-fill" : "bi bi-star"} />

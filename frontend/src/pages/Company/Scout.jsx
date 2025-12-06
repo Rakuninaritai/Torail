@@ -43,29 +43,32 @@ export default function ScoutsPage({ initialUser }) {
     const company = (comps?.results || comps || [])[0];
     if (!company) { alert("会社がありません。まず会社を作成してください。"); return; }
 
-    // 2) 既存スレッドがあれば流用、なければ作成
-    //    API設計上、重複は unique_together(company, user) でDB側保護
+    // 2) 既存スレッドがあれば流用、なければ作成（先に検索）
     let threadId = null;
-    try{
-      const created = await api("/dm/threads/", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ company: company.id, user: toUserId })
-      });
-      threadId = created.id;
-    }catch(e){
-      // 既存を検索
-      const list = await api(`/dm/threads/?company=${company.id}`, { method:"GET" });
+    try {
+      const list = await api(`/dm/threads/?company=${company.id}`, { method: "GET" });
       const exist = (list?.results || list || []).find(th => String(th.user) === String(toUserId));
-      if (!exist) throw e;
-      threadId = exist.id;
+      if (exist) {
+        threadId = exist.id;
+      } else {
+        const created = await api("/dm/threads/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ company: company.id, user: toUserId })
+        });
+        threadId = created.id;
+      }
+    } catch (e) {
+      // 既存スレッド取得/作成に失敗
+      console.warn('thread lookup/create failed', e);
+      throw e;
     }
 
-    // 3) メッセージ送信
+    // 3) メッセージ送信（sender を company に設定）
     await api("/dm/messages/", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ thread: threadId, subject: subject||"", body })
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ thread: threadId, sender: 'company', subject: subject||"", body })
     });
 
     // UI更新（簡易）
@@ -76,7 +79,7 @@ export default function ScoutsPage({ initialUser }) {
       messages: [{ from:"company", text: body, date: new Date().toLocaleString() }],
     }, ...prev]);
 
-    alert("送信しました。学生側のスカウトBOXに届きます。");
+    alert("送信しました。学生側のDMboxに届きます。");
     setTab("history");
   };
 
@@ -84,13 +87,12 @@ export default function ScoutsPage({ initialUser }) {
   const handleSend = async (state) => {
     // state: { toUserName, subject, body, ... }
     const uid = params.get("uid");
-    const username = params.get("to") || initialUser || state.toUserName;
     if (!uid) { alert("候補者IDがありません（ダッシュボードから遷移してください）"); return; }
     await sendScout({ toUserId: uid, subject: state.subject, body: state.body });
   };
   // ──────────────────────────────────────────────
   // ステータス更新（履歴リストのドロップダウン等から呼ばれる想定）
-  // usage: onUpdateStatus(id, "返信あり" | "既読" | "未読" | "辞退" ...)
+  // usage: onUpdateStatus(id, "既読" | "未読" ...)
   const handleUpdateStatus = (id, status) => {
     setConversations(prev =>
       prev.map(c => (c.id === id ? { ...c, status } : c))
@@ -105,7 +107,7 @@ export default function ScoutsPage({ initialUser }) {
         c.id === id
           ? {
               ...c,
-              status: "返信あり",
+              status: "未読",
               messages: [
                 ...(c.messages || []),
                 { from: "company", text, date: new Date().toLocaleString() },

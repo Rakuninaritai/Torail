@@ -1,10 +1,11 @@
 // 招待での取得時emailは除外してもいいかも統計のチームでも飛んでるかも、メール飛ばない(SMTPやめる??railwayでのアプデでらしい)
 // pw忘れ対応、グーグルソーシャル赤餅でも、バックのhtmlアイコン出ない(いずれもmyp後)
-// トピックタスク名義変更??
 // 自動バックアップ&開発環境
 // チーム名アルファベットで
 // mypポートフォリオ編集,博士追加,何年卒追加,県選択し追加,言語選択言語の文字消す,エラーtoast分かりやすく,エラー表示
 // codexコードデバック
+// S3対応か検討
+// stripeリクエスト核
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, Route, Routes, useNavigate, useParams, useLocation } from 'react-router-dom';
 
@@ -32,12 +33,54 @@ import 'react-toastify/dist/ReactToastify.css';
 import NotFound from './pages/NotFound';
 import CompanyDashboard from './pages/Company/CompanyDashboard';
 import CompanySettingsPage from './pages/Company/CompanySettings';
-import Scout from './pages/Company/Scout';
+import DM from './pages/Company/DM';
 import UserPage from './pages/UserPage';
 import ScoutBoxPage from './pages/ScoutBox';
 import UserBadge from './components/Home/UserBadge';
 import PublicCompanyPage from './pages/Company/PublicCompanyPage';
 import LoginCompanyPage from './pages/Company/LoginCompanyPage';
+import Checkout from './pages/Checkout';
+import Success from './pages/Success';
+
+// 非企業アカウントが企業ページにアクセスしたときに表示する案内
+function CompanyOnlyMessage() {
+  return (
+    <div className="container-xxl pb-5">
+      <div className="page-header mb-3">
+        <i className="bi bi-lock-fill fs-4" />
+        <h1 className="title h4 mb-0">企業専用ページ</h1>
+        <span className="subtle ms-2">このページは企業アカウント専用です</span>
+      </div>
+      <section className="torail-card">
+        <p>現在のアカウントは企業アカウントではないため、このページにアクセスできません。</p>
+        <p className="mb-0">企業として利用するには、企業アカウントでログインするか、アカウントを企業に切り替えてください。</p>
+        <div className="mt-3">
+          <a className="btn btn-primary me-2" href="/company/login">企業でログイン</a>
+          <a className="btn btn-outline-secondary" href="/">ホームへ戻る</a>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// 学生専用ページ（受信ボックスなど）に対する案内
+function StudentOnlyMessage() {
+  return (
+    <div className="container-xxl pb-5">
+      <div className="page-header mb-3">
+        <i className="bi bi-lock-fill fs-4" />
+        <h1 className="title h4 mb-0">学生専用ページ</h1>
+        <span className="subtle ms-2">このページは学生アカウント専用です</span>
+      </div>
+      <section className="torail-card">
+        <p>現在のアカウントは学生アカウントではないため、このページにアクセスできません。</p>
+        <div className="mt-3">
+          <a className="btn btn-primary me-2" href="/">ホームへ戻る</a>
+        </div>
+      </section>
+    </div>
+  );
+}
 
 
 /* =========================
@@ -171,6 +214,12 @@ function App() {
     let ignore = false;
     (async () => {
       if (!Token) { setMyProfile(null); return; }
+      // 学生アカウント (student または both) の場合のみ profile/me を取得する
+      const acct = Token && typeof Token === 'object' ? Token.account_type : null;
+      if (acct !== 'student' && acct !== 'both') {
+        if (!ignore) setMyProfile(null);
+        return;
+      }
       try {
         const me = await api('/profile/me/', { method: 'GET' });
         if (!ignore) setMyProfile(me);
@@ -203,6 +252,7 @@ function App() {
             <UserBadge
               username={Token?.username}
               avatarUrl={MyProfile?.avatar_url}
+              accountType={Token?.account_type}
               /* inboxCount={未読件数があれば入れる} */
             />
           </div>
@@ -212,6 +262,7 @@ function App() {
             <UserBadge
               username={Token?.username}
               avatarUrl={MyProfile?.avatar_url}
+              accountType={Token?.account_type}
             />
             <div className="small text-muted mt-1">企業アカウント</div>
           </div>
@@ -278,11 +329,14 @@ function App() {
               <NavLink to="/company/dashboard" className={({isActive})=>isActive?'nav-link active':'nav-link'}>
                 <i className="bi bi-speedometer2"></i> ダッシュボード
               </NavLink>
-              <NavLink to="/company/scout" className={({isActive})=>isActive?'nav-link active':'nav-link'}>
-                <i className="bi bi-send"></i> スカウト
+              <NavLink to="/company/dmbox" className={({isActive})=>isActive?'nav-link active':'nav-link'}>
+                <i className="bi bi-inbox"></i> DMbox
               </NavLink>
               <NavLink to="/company/settings" className={({isActive})=>isActive?'nav-link active':'nav-link'}>
                 <i className="bi bi-gear"></i> 会社設定
+              </NavLink>
+              <NavLink to="/purchase" className={({isActive})=>isActive?'nav-link active':'nav-link'}>
+                <i className="bi bi-credit-card"></i> 購入テスト
               </NavLink>
             </>
           ) : (
@@ -298,6 +352,9 @@ function App() {
               </NavLink>}
               {Token && <NavLink to={teamSlugPath('settings')} className={({isActive})=>isActive?'nav-link active':'nav-link'}>
                 <i className="bi bi-gear"></i> 設定・招待
+              </NavLink>}
+              {Token && <NavLink to="/purchase" className={({isActive})=>isActive?'nav-link active':'nav-link'}>
+                <i className="bi bi-credit-card"></i> 購入テスト
               </NavLink>}
             </>
           )}
@@ -330,7 +387,7 @@ function App() {
           {/* ユーザーバッジ */}
           {Token && (
             <div className="mb-3 text-center">
-              <UserBadge username={Token?.username} avatarUrl={MyProfile?.avatar_url} />
+                <UserBadge username={Token?.username} avatarUrl={MyProfile?.avatar_url} accountType={Token?.account_type} />
               {isCompany && <div className="small text-muted mt-1">企業アカウント</div>}
             </div>
           )}
@@ -370,11 +427,11 @@ function App() {
                   <i className="bi bi-speedometer2"></i> ダッシュボード
                 </NavLink>
                 <NavLink
-                  to="/company/scout"
+                  to="/company/dmbox"
                   className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
                   data-bs-dismiss="offcanvas"
                 >
-                  <i className="bi bi-send"></i> スカウト
+                  <i className="bi bi-inbox"></i> DMbox
                 </NavLink>
                 <NavLink
                   to="/company/settings"
@@ -527,16 +584,75 @@ function App() {
           {/* 既存 */}
           <Route path="/login_register" element={<Login_Register onLoginSuccess={handleLoginSuccess} settoken={setToken} />} />
           <Route path="/slack/callback" element={<SlackCallback />} />
-          <Route path='/company/dashboard' element={<CompanyDashboard/>}/>
-          <Route path='/company/scout' element={<Scout initialUser="山本 舟人"/>}/>
-          <Route path='/company/settings' element={<CompanySettingsPage isAdmin={true} />}/>
+          {/* Company routes: require login + company account. */}
+          <Route
+            path='/company/dashboard'
+            element={
+              isLoading ? null : (
+                Token ? (
+                  isCompany ? <CompanyDashboard /> : <CompanyOnlyMessage />
+                ) : (
+                  <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />
+                )
+              )
+            }
+          />
+          <Route
+            path='/company/dm'
+            element={
+              isLoading ? null : (
+                Token ? (
+                  isCompany ? <DM initialUser={"山本 舟人"} /> : <CompanyOnlyMessage />
+                ) : (
+                  <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />
+                )
+              )
+            }
+          />
+          <Route
+            path='/company/settings'
+            element={
+              isLoading ? null : (
+                Token ? (
+                  isCompany ? <CompanySettingsPage isAdmin={true} /> : <CompanyOnlyMessage />
+                ) : (
+                  <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />
+                )
+              )
+            }
+          />
           <Route path="/mypage/:username" element={<UserPage token={Token} />} />
-          <Route path='/scoutbox' element={<ScoutBoxPage/>} />
+          <Route
+            path='/dmbox'
+            element={
+              isLoading ? null : (
+                Token ? (
+                  (Token.account_type === 'student' || Token.account_type === 'both') ? <ScoutBoxPage /> : <StudentOnlyMessage />
+                ) : (
+                  <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />
+                )
+              )
+            }
+          />
+          <Route
+            path='/company/dmbox'
+            element={
+              isLoading ? null : (
+                Token ? (
+                  isCompany ? <ScoutBoxPage /> : <CompanyOnlyMessage />
+                ) : (
+                  <Navigate replace to={`/login_register?next=${encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)}`} />
+                )
+              )
+            }
+          />
           {/* 仮追加 */}
           <Route path='/company/public/:slug' element={<PublicCompanyPage/>}/>
           <Route path='/company/login' element={<LoginCompanyPage/>}/>
           <Route/>
 
+          {/* Stripe success page */}
+          <Route path="/success" element={<Success />} />
           {/* 404ページ常にルート最下層で */}
           <Route path='*' element={<NotFound/>} />
         </Routes>

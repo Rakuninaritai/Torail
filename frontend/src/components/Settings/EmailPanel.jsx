@@ -1,4 +1,16 @@
-// components/EmailPanel.jsx
+// ============================================================
+// メール通知パネル - React コンポーネント
+// ============================================================
+//
+// 【特徴】
+// -------
+// Slack / Discord と異なり、設定が不要。
+// チームメンバーのメールアドレスに自動送信される。
+//
+// できることは「テスト送信」のみ。
+// 実際の通知は tasks.py で自動的に処理される。
+//
+
 import { useState } from "react";
 import { api } from "../../api";
 import { toast } from "react-toastify";
@@ -8,6 +20,10 @@ export default function EmailPanel({ teamId, enabled }) {
   const disabled = !enabled;
 
   const test = async () => {
+    /**
+     * テストメール送信。
+     * チームメンバー（本人以外）にテストメールが送信される。
+     */
     setLoading(true);
     try {
       const res = await api(`/integrations/email/test/?team_id=${teamId}`, { method: "POST" });

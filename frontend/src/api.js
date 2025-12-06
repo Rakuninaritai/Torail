@@ -29,6 +29,7 @@ export async function api(path, options = {}) {
     ...(needsCSRF ? { 'X-CSRFToken': getCSRFCookie() } : {}),
   };
 
+
   // Body種別から Content-Type を調整
   const isFormData = (config.body instanceof FormData);
   const isJSONString = (typeof config.body === 'string' && !isFormData);

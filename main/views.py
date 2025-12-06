@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404
+from django.http import JsonResponse, HttpResponse
 from django.db.models import Q,Max,Count
 from django.db.models.functions import Coalesce, Cast
 from django.db.models import DateTimeField
@@ -15,11 +16,16 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from rest_framework import parsers
 from datetime import timedelta
+from datetime import datetime
 from dj_rest_auth.views import UserDetailsView
 from django.utils import timezone
 from django.db import IntegrityError, transaction
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
+from django.views.decorators.csrf import csrf_exempt
+import json
+import stripe
+import logging
 
 from .models import (
     User, Team, Subject, Task, Record, TeamMembership, TeamInvitation, Integration,
@@ -36,6 +42,357 @@ from .serializers import (
     CompanySerializer, CompanyMemberSerializer, CompanyPlanSerializer, CompanyHiringSerializer,
     MessageTemplateSerializer, DMThreadSerializer, DMMessageSerializer,CompanyHiringPublicSerializer,CompanyPublicSerializer,CandidateBriefSerializer
 )
+from .authentication import CookieJWTAuthentication
+# --- Stripe Checkout endpoints (create session + webhook) ---
+# 解説:
+# - フロントエンドは /api/stripe/create-checkout-session/ に POST し、
+#   サーバ側で Stripe Checkout Session を作成します。
+# - サーバは作成時に軽量な Order レコードを残し、Checkout 完了は
+#   Stripe の webhook (stripe_webhook) で受けて Order/CompanySubscription を更新します。
+# - subscription の場合は `price_id`（price_...）と `company_id` が必要です。
+# - セキュリティ: subscription 作成は会社のオーナー/管理者のみ許可しています。
+@csrf_exempt
+def create_checkout_session(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=400)
+    logger = logging.getLogger(__name__)
+    # Debug: log auth / cookie / header presence (do NOT log secrets)
+    try:
+        user_obj = getattr(request, 'user', None)
+        is_auth = bool(user_obj and getattr(user_obj, 'is_authenticated', False))
+        # If this is a plain Django HttpRequest (function view), DRF authentication
+        # may not have run. Try to authenticate using our CookieJWTAuthentication
+        # so that `request.user` is available when cookies contain JWT.
+        if not is_auth:
+            try:
+                auth = CookieJWTAuthentication()
+                auth_res = auth.authenticate(request)
+                if auth_res:
+                    # auth_res is (user, validated_token)
+                    request.user = auth_res[0]
+                    user_obj = request.user
+                    is_auth = True
+            except Exception:
+                # ignore auth errors here; we'll treat as unauthenticated below
+                pass
+        logger.info('create_checkout_session called; method=%s path=%s authenticated=%s user_id=%s',
+                    request.method, request.path, is_auth, getattr(user_obj, 'id', None))
+        logger.info('Request.COOKIES keys=%s', list(request.COOKIES.keys()))
+        logger.info('HTTP_COOKIE header present=%s', bool(request.META.get('HTTP_COOKIE')))
+        logger.info('X-CSRFToken header present=%s', bool(request.META.get('HTTP_X_CSRFTOKEN')))
+        logger.info('Authorization header present=%s', bool(request.META.get('HTTP_AUTHORIZATION')))
+    except Exception:
+        # never fail the view due to logging
+        pass
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'invalid json'}, status=400)
+
+    mode = data.get('mode', 'payment')
+    price_id = data.get('price_id')
+    company_id = data.get('company_id')
+    success_url = data.get('success_url') or (settings.FRONTEND_URL.rstrip('/') + '/success')
+    cancel_url = data.get('cancel_url') or (settings.FRONTEND_URL.rstrip('/') + '/cancel')
+    metadata = data.get('metadata', {}) or {}
+
+    try:
+        if mode == 'subscription':
+            # subscription mode requires price_id and company_id
+            if not price_id or not company_id:
+                return JsonResponse({'error': 'price_id and company_id are required for subscription'}, status=400)
+
+            # membership check: allow any company member (previously owner/admin only)
+            # - フロントからは Cookie ベースの認証で request.user を送る想定
+            # - ここでは会社に所属するメンバーであることだけを確認し、作成を許可します
+            if not getattr(request, 'user', None) or not request.user.is_authenticated:
+                return JsonResponse({'error': 'authentication required'}, status=401)
+            if not CompanyMember.objects.filter(company__id=company_id, user=request.user).exists():
+                return JsonResponse({'error': 'forbidden'}, status=403)
+
+            # Stripe Checkout Session を作成する（サブスクリプション）
+            # - frontend は price_id（price_...）を渡すこと（product_id では動かない）
+            # - metadata に会社IDを入れておくと webhook 側で紐付けしやすくなる
+            session = stripe.checkout.Session.create(
+                payment_method_types=['card'],
+                line_items=[{'price': price_id, 'quantity': 1}],
+                mode='subscription',
+                success_url=success_url,
+                cancel_url=cancel_url,
+                metadata={**metadata, 'company_id': str(company_id)},
+            )
+
+            # create Order stub linking company
+            # - ここでは金額を 0 にして stub 作成（本当の請求は Stripe 側が管理）
+            try:
+                from .models import Order, Company
+                company = Company.objects.get(id=company_id)
+                Order.objects.create(
+                    user=request.user,
+                    company=company,
+                    amount=0,
+                    currency='jpy',
+                    stripe_session_id=session.id,
+                )
+            except Exception:
+                # ログや通知を入れるとデバッグが楽になりますが、ここでは安全に握り潰す
+                pass
+
+            # Stripe.js の redirectToCheckout が廃止されたため
+            # Checkout Session の `url` を返してフロントで直接遷移する方式に切り替える。
+            return JsonResponse({'sessionId': session.id, 'url': getattr(session, 'url', None)})
+
+        else:
+            # one-time payment
+            amount = data.get('amount')
+            if amount is None:
+                return JsonResponse({'error': 'amount is required'}, status=400)
+            currency = data.get('currency', 'jpy')
+            name = data.get('name', '購入')
+
+            session = stripe.checkout.Session.create(
+                payment_method_types=['card'],
+                line_items=[{
+                    'price_data': {
+                        'currency': currency,
+                        'product_data': {'name': name},
+                        'unit_amount': int(amount),
+                    },
+                    'quantity': 1,
+                }],
+                mode='payment',
+                success_url=success_url,
+                cancel_url=cancel_url,
+                metadata=metadata,
+            )
+
+            try:
+                from .models import Order
+                Order.objects.create(
+                    user=(request.user if getattr(request, 'user', None) and request.user.is_authenticated else None),
+                    amount=int(amount),
+                    currency=currency,
+                    stripe_session_id=session.id,
+                )
+            except Exception:
+                pass
+
+            # 同様に one-time payment の場合も session.url を返す
+            return JsonResponse({'sessionId': session.id, 'url': getattr(session, 'url', None)})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+def stripe_webhook(request):
+    logger = logging.getLogger(__name__)
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    payload = request.body
+    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE', '')
+    webhook_secret = settings.STRIPE_WEBHOOK_SECRET
+    logger.info(f'Webhook called: has_secret={bool(webhook_secret)}, has_sig={bool(sig_header)}')
+    try:
+        if webhook_secret:
+            event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+            logger.info(f'Webhook signature verified successfully')
+        else:
+            logger.warning(f'STRIPE_WEBHOOK_SECRET not set, processing unsigned webhook')
+            event = json.loads(payload)
+        logger.info(f'Webhook received: type={event.get("type")}, id={event.get("id")}')
+    except ValueError as e:
+        logger.error(f'Webhook ValueError: {e}')
+        return HttpResponse(status=400)
+    except Exception as e:
+        logger.error(f'Webhook error: {e}')
+        return HttpResponse(status=400)
+
+    # ハンドリング: webhook イベントごとに処理を分岐します
+    ev_type = event.get('type')
+    if ev_type == 'checkout.session.completed':
+        # Checkout が完了した直後のイベント
+        # - session オブジェクトには subscription や payment_intent の参照が入る
+        # - metadata に入れた company_id を使って CompanySubscription を作成/更新する
+        session = event['data']['object']
+        logger.info(f'checkout.session.completed: session_id={session.get("id")}, mode={session.get("mode")}, subscription={session.get("subscription")}')
+        try:
+            from .models import Order, CompanySubscription, Company
+            # ① Order を探して paid フラグを立てる
+            order = Order.objects.filter(stripe_session_id=session.get('id')).first()
+            if order:
+                logger.info(f'Order found: order_id={order.id}, updating paid=True')
+                order.paid = True
+                order.stripe_payment_intent_id = session.get('payment_intent') or order.stripe_payment_intent_id
+                order.save(update_fields=['paid','stripe_payment_intent_id','updated_at'])
+                logger.info(f'Order updated: order_id={order.id}, paid=True')
+            else:
+                logger.warning(f'Order not found for session_id={session.get("id")}')
+
+            # ② サブスクリプションがあれば CompanySubscription を作成/更新
+            subscription_id = session.get('subscription')
+            metadata = session.get('metadata') or {}
+            company_id = metadata.get('company_id')
+            logger.info(f'Subscription check: subscription_id={subscription_id}, company_id={company_id}')
+            if subscription_id and company_id:
+                try:
+                    company = Company.objects.filter(id=company_id).first()
+                    if company:
+                        # get_or_create で初回作成、既存なら status を active に更新
+                        sub, created = CompanySubscription.objects.get_or_create(
+                            stripe_subscription_id=subscription_id,
+                            defaults={'company': company, 'status': 'active'}
+                        )
+                        if not created:
+                            sub.company = company
+                            sub.status = 'active'
+                            sub.save()
+                        logger.info(f'CompanySubscription {"created" if created else "updated"}: sub_id={sub.id}, company_id={company_id}')
+                    else:
+                        logger.warning(f'Company not found for company_id={company_id}')
+                except Exception as e:
+                    logger.error(f'CompanySubscription error: {e}')
+        except Exception as e:
+            logger.error(f'checkout.session.completed error: {e}')
+    elif ev_type == 'invoice.payment_succeeded':
+        invoice = event['data']['object']
+        subscription_id = invoice.get('subscription')
+        logger.info(f'invoice.payment_succeeded: subscription_id={subscription_id}')
+        if subscription_id:
+            try:
+                from .models import CompanySubscription
+                sub = CompanySubscription.objects.filter(stripe_subscription_id=subscription_id).first()
+                if sub:
+                    sub.status = 'active'
+                    # invoice に period_end が入っている場合を使う
+                    period_end = invoice.get('lines', {}).get('data', [])
+                    period_end_ts = invoice.get('period_end') or invoice.get('current_period_end')
+                    if period_end_ts:
+                        try:
+                            sub.current_period_end = datetime.fromtimestamp(int(period_end_ts))
+                        except Exception:
+                            pass
+                    sub.save()
+                    logger.info(f'CompanySubscription updated: sub_id={sub.id}, status=active')
+                else:
+                    logger.warning(f'CompanySubscription not found for subscription_id={subscription_id}')
+            except Exception as e:
+                logger.error(f'invoice.payment_succeeded error: {e}')
+    elif ev_type == 'payment_intent.succeeded':
+        pi = event['data']['object']
+        logger.info(f'payment_intent.succeeded: pi_id={pi.get("id")}')
+        try:
+            from .models import Order
+            order = Order.objects.filter(stripe_payment_intent_id=pi.get('id')).first()
+            if order:
+                order.paid = True
+                order.save(update_fields=['paid','updated_at'])
+                logger.info(f'Order updated via payment_intent: order_id={order.id}, paid=True')
+            else:
+                logger.warning(f'Order not found for payment_intent_id={pi.get("id")}')
+        except Exception as e:
+            logger.error(f'payment_intent.succeeded error: {e}')
+    else:
+        logger.info(f'Webhook event not handled: type={ev_type}')
+
+    return HttpResponse(status=200)
+
+
+@csrf_exempt
+def retrieve_checkout_session(request):
+    """GET /api/stripe/session/?session_id=cs_...
+    - Returns stored Order info if present, otherwise fetches the Checkout Session
+      from Stripe and returns its key fields so the frontend can verify status.
+    - No authentication required because this is typically called from the success
+      redirect (but you can expand to require auth if desired).
+    """
+    logger = logging.getLogger(__name__)
+    from django.views.decorators.http import require_GET
+    if request.method != 'GET':
+        return JsonResponse({'error': 'GET required'}, status=400)
+    session_id = request.GET.get('session_id')
+    logger.info(f'retrieve_checkout_session called: session_id={session_id}')
+    # If client didn't provide session_id, try to resolve the most-recent Order
+    # for the authenticated user (this supports success URL without params)
+    if not session_id:
+        # Attempt cookie-based authentication like other function views
+        try:
+            auth = CookieJWTAuthentication()
+            auth_res = auth.authenticate(request)
+            if auth_res:
+                request.user = auth_res[0]
+        except Exception:
+            pass
+
+        if getattr(request, 'user', None) and getattr(request.user, 'is_authenticated', False):
+            try:
+                from .models import Order
+                last_order = Order.objects.filter(user=request.user).order_by('-created_at').first()
+                if last_order and last_order.stripe_session_id:
+                    session_id = last_order.stripe_session_id
+                    logger.info(f'Resolved session_id from user: {session_id}')
+                else:
+                    logger.warning(f'No recent session found for user')
+                    return JsonResponse({'error': 'no recent session found for user'}, status=404)
+            except Exception as e:
+                logger.error(f'Error resolving recent session: {e}')
+                return JsonResponse({'error': 'unable to resolve recent session'}, status=500)
+        else:
+            logger.warning(f'session_id required or authenticate')
+            return JsonResponse({'error': 'session_id required or authenticate'}, status=400)
+
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    resp = {'sessionId': session_id}
+    try:
+        # Try to find an Order in our DB first
+        from .models import Order, CompanySubscription
+        order = Order.objects.filter(stripe_session_id=session_id).first()
+        if order:
+            resp['order'] = {
+                'id': order.id,
+                'paid': bool(order.paid),
+                'amount': getattr(order, 'amount', None),
+                'currency': getattr(order, 'currency', None),
+            }
+            logger.info(f'Order found: id={order.id}, paid={order.paid}')
+        else:
+            logger.warning(f'Order not found in DB for session_id={session_id}')
+
+        # Fetch Stripe Checkout Session to get authoritative status
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+            resp['stripe'] = {
+                'id': session.get('id'),
+                'payment_status': session.get('payment_status'),
+                'status': session.get('status'),
+                'subscription': session.get('subscription'),
+                'payment_intent': session.get('payment_intent'),
+                'mode': session.get('mode'),
+            }
+            logger.info(f'Stripe session retrieved: payment_status={session.get("payment_status")}, subscription={session.get("subscription")}')
+            # If there's a subscription id, try to include our CompanySubscription status
+            subscription_id = session.get('subscription')
+            if subscription_id:
+                sub = CompanySubscription.objects.filter(stripe_subscription_id=subscription_id).first()
+                if sub:
+                    resp['company_subscription'] = {
+                        'id': sub.id,
+                        'status': sub.status,
+                        'current_period_end': getattr(sub, 'current_period_end', None),
+                    }
+                    logger.info(f'CompanySubscription found: id={sub.id}, status={sub.status}')
+                else:
+                    logger.warning(f'CompanySubscription not found for subscription_id={subscription_id}')
+        except Exception as e:
+            # non-fatal: still return DB order info if present
+            logger.error(f'Error retrieving Stripe session: {e}')
+            pass
+
+        logger.info(f'retrieve_checkout_session response: {resp}')
+        return JsonResponse(resp)
+    except Exception as e:
+        logger.error(f'retrieve_checkout_session error: {e}')
+        return JsonResponse({'error': str(e)}, status=500)
+
 # 当該を返す
 class PatchedUserDetailsView(UserDetailsView):
     serializer_class = UserSerializer
@@ -85,6 +442,9 @@ class PublicProfileView(APIView):
     def get(self, request, user_id):
         user = get_object_or_404(User, pk=user_id)
         prof = getattr(user, 'profile', None)
+        # 非学生アカウントは公開プロファイルを持たない
+        if getattr(user, 'account_type', None) not in ('student', 'both'):
+            return Response({'detail': 'not found'}, status=404)
         if not prof or not prof.is_public:
             return Response({'detail':'not public'}, status=404)
         return Response(UserProfileSerializer(prof, context={'request': request}).data)
@@ -94,10 +454,16 @@ class MyProfileView(APIView):
     permission_classes=[IsAuthenticated]
     parser_classes = [parsers.JSONParser, parsers.FormParser, parsers.MultiPartParser]
     def get(self, request):
+        # 非学生アカウントにはプロフィール機能を提供しない
+        if getattr(request.user, 'account_type', None) not in ('student', 'both'):
+            return Response({'detail': 'not found'}, status=404)
         prof, _ = UserProfile.objects.get_or_create(user=request.user)
         return Response(UserProfileSerializer(prof, context={'request': request}).data)
 
     def patch(self, request):
+        # 非学生アカウントにはプロフィール編集を許可しない
+        if getattr(request.user, 'account_type', None) not in ('student', 'both'):
+            return Response({'detail': 'not found'}, status=404)
         prof, _ = UserProfile.objects.get_or_create(user=request.user)
         # 画像が来ていたら先に保存
         f = request.FILES.get('avatar')
@@ -445,9 +811,11 @@ class CompanyViewSet(viewsets.ModelViewSet):
             # 方針：未登録なら“先にサインアップして待ってもらう”
             return Response({'detail': 'ユーザーが見つかりません。先に企業サインアップをお願いします。'}, status=404)
 
-        # 既に所属？
+        # 既に同じ会社のメンバーか、他社に所属していないかチェック
         if CompanyMember.objects.filter(company=company, user=target).exists():
             return Response({'detail': 'すでにこの会社のメンバーです'}, status=400)
+        if CompanyMember.objects.filter(user=target).exists():
+            return Response({'detail': '既に別の会社に所属しています'}, status=400)
 
         CompanyMember.objects.create(company=company, user=target, role='member')
         # 学生→両方に昇格
@@ -468,6 +836,10 @@ class CompanyMemberViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         company = serializer.validated_data['company']
         _require_owner(company, self.request.user)
+        # ユーザーが既にどこかの会社に所属していないことを確認
+        user = serializer.validated_data.get('user')
+        if user and CompanyMember.objects.filter(user=user).exists():
+            raise PermissionDenied("そのユーザーは既にいずれかの会社に所属しています。")
         serializer.save()
     def perform_destroy(self, instance):
         _require_owner(instance.company, self.request.user)
@@ -477,10 +849,13 @@ class CompanyPlanViewSet(viewsets.ModelViewSet):
     serializer_class = CompanyPlanSerializer
     permission_classes=[IsAuthenticated]
     def get_queryset(self):
-        return CompanyPlan.objects.filter(company__members__user=self.request.user)
+        # 最新の適用開始日が先頭に来るようにソートして返す
+        return CompanyPlan.objects.filter(company__members__user=self.request.user).order_by('-active_from')
     def perform_create(self, serializer):
         company = serializer.validated_data['company']
-        _require_owner(company, self.request.user)
+        # 変更: オーナーのみではなく、会社メンバーであればプラン作成を許可する
+        if not CompanyMember.objects.filter(company=company, user=self.request.user).exists():
+            raise PermissionDenied("会社メンバーのみ作成できます")
         serializer.save()
 
 class CompanyHiringViewSet(viewsets.ModelViewSet):
@@ -510,9 +885,18 @@ class CandidateSearchView(APIView):
          # --- filters ---
          langs = request.GET.get("languages")
          if langs:
-             arr = [s.strip().lower() for s in langs.split(",") if s.strip()]
+             # フロントは language の slug を送る想定だが、name や aliases でもマッチするようにする
+             arr = [s.strip() for s in langs.split(",") if s.strip()]
              if arr:
-                 qs = qs.filter(languages__name__in=arr).distinct()
+                lang_q = Q()
+                # 各候補について slug/name/aliases を case-insensitive に照合
+                for a in arr:
+                    lang_q |= (
+                        Q(languages__slug__iexact=a)
+                        | Q(languages__name__iexact=a)
+                        | Q(languages__aliases__icontains=a)
+                    )
+                qs = qs.filter(lang_q).distinct()
 
          grade = request.GET.get("grade")
          if grade:
@@ -520,16 +904,43 @@ class CandidateSearchView(APIView):
 
          pref = request.GET.get("pref")
          if pref:
-             qs = qs.filter(prefecture=pref)
+            # サマリー的な地域グループ（関東/関西/東海/九州）を受け取る場合は所属都道府県群に展開する
+            region_map = {
+                '関東': ['茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県'],
+                '関西': ['大阪府','兵庫県','京都府','滋賀県','奈良県','和歌山県'],
+                '東海': ['愛知県','岐阜県','静岡県','三重県'],
+                '九州': ['福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県','沖縄県'],
+            }
+            if pref in region_map:
+                qs = qs.filter(prefecture__in=region_map[pref])
+            else:
+                qs = qs.filter(prefecture=pref)
 
          q = request.GET.get("q")
          if q:
              q = q.strip()
+             # username は User モデル側のフィールドなので related lookup を用いる
              qs = qs.filter(
-                 Q(username__icontains=q) |
+                 Q(user__username__icontains=q) |
                  Q(display_name__icontains=q) |
                  Q(school__icontains=q)
              )
+
+         # --- recent activity filter ---
+         recent_days = request.GET.get("recent_active_days")
+         if recent_days:
+             try:
+                 n = int(recent_days)
+                 if n > 0:
+                     qs = qs.filter(
+                         Q(user__record__end_time__gte=self._days_ago(n)) |
+                         Q(user__record__start_time__gte=self._days_ago(n)) |
+                         Q(user__record__date__gte=self._days_ago_date(n))
+                     ).distinct()
+             except ValueError:
+                 pass
+
+        # visibility パラメータはダッシュボード側では使用しない
 
          # --- activity 集計 ---
          qs = qs.annotate(
@@ -563,7 +974,24 @@ class CandidateSearchView(APIView):
          else:
              qs = qs.order_by("-active7_count", "-active30_count", "-id")
 
-         # --- paginate ---
+         # --- post-annotations filters (ストリーク等の近似) ---
+         # 注: 厳密な「連続日数ストリーク」はここでは複雑なので、
+         # 活動日数を近似として用いる（active7_count/active30_count）
+         try:
+             cur_st = int(request.GET.get("current_streak_min") or 0)
+         except ValueError:
+             cur_st = 0
+         try:
+             max_st = int(request.GET.get("max_streak_min") or 0)
+         except ValueError:
+             max_st = 0
+         if cur_st > 0:
+             # 直近7日内のアクティブ日数が閾値以上
+             qs = qs.filter(active7_count__gte=cur_st)
+         if max_st > 0:
+             qs = qs.filter(active30_count__gte=max_st)
+
+         # --- paginate (最終的なフィルタ後にページング) ---
          paginator = CandidateSearchPagination()
          page = paginator.paginate_queryset(qs, request)
 
@@ -589,12 +1017,14 @@ class CandidateSearchView(APIView):
                  "active7": getattr(p, "active7_count", 0),
                  "active30": getattr(p, "active30_count", 0),
                  "lastRecordAt": getattr(p, "last_record_at", None),
-                 # 一覧は公開のみ返しているので文字列で固定返却
-                 "visibility": "public",
+                # 一覧は公開のみ返しているため visibility フィールドは返さない
                  "avatar_url": _abs_avatar_url(p),
                  "fav": False,
              }
 
+         # paginator.paginate_queryset が None を返す可能性に備える
+         if page is None:
+             page = []
          data = [_row(p) for p in page]
          ser = CandidateBriefSerializer(data, many=True)
          return paginator.get_paginated_response(ser.data)
@@ -614,10 +1044,40 @@ class PublicCompanyView(APIView):
     permission_classes = [AllowAny]
     def get(self, request, slug):
         company = get_object_or_404(Company, slug=slug)
+        # 非公開設定なら見せない
+        if not getattr(company, 'is_public', True):
+            return Response({'detail': 'not public'}, status=404)
+
+        hirings = []
+        if getattr(company, 'show_hirings', True):
+            hirings = CompanyHiringPublicSerializer(company.hirings.order_by('-created_at'), many=True).data
+
         data = {
             "company": CompanyPublicSerializer(company).data,
-            "hirings": CompanyHiringPublicSerializer(company.hirings.order_by('-created_at'), many=True).data,
+            "hirings": hirings,
         }
+        return Response(data)
+
+class UsernameSearchView(APIView):
+    """ユーザー名で検索（企業側のメンバー追加用）
+    GET /api/users/search_by_username/?q=<query>
+    - account_type が 'student' のユーザーは除外する
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        q = (request.query_params.get('q') or '').strip()
+        if not q:
+            return Response([], status=200)
+        qs = User.objects.filter(username__icontains=q).exclude(account_type='student').order_by('username')[:20]
+        data = []
+        for u in qs:
+            data.append({
+                'id': str(u.id),
+                'username': u.username,
+                'email': u.email or '',
+                'account_type': getattr(u, 'account_type', None),
+            })
         return Response(data)
 class CompanyMemberInviteView(APIView):
     permission_classes=[IsAuthenticated]
@@ -626,24 +1086,42 @@ class CompanyMemberInviteView(APIView):
         comp = get_object_or_404(Company, pk=company_id)
         _require_owner(comp, request.user)  # ownerのみ
         user = get_object_or_404(User, email=email)
+        # 他社所属チェック
+        if CompanyMember.objects.filter(user=user).exists():
+            return Response({'detail': 'そのユーザーは既に別の会社に所属しています'}, status=400)
         CompanyMember.objects.get_or_create(company=comp, user=user, defaults={'role':'member'})
         return Response({"status":"ok"})
 # 学生のScoutBox用：スレッド一覧（要約）
 class MyDMThreadsSummary(APIView):
     permission_classes=[IsAuthenticated]
     def get(self, request):
+        # このエンドポイントは学生向け（企業にはメールボックスは不要）
+        if getattr(request.user, 'account_type', None) not in ('student', 'both'):
+            return Response({'detail': 'not found'}, status=404)
         # 学生側の自分宛スレッド
         qs = DMThread.objects.filter(user=request.user).select_related('company').order_by('-created_at')
+        q = (request.query_params.get('q') or '').strip()
+        if q:
+            qs = qs.filter(
+                Q(company__name__icontains=q) |
+                Q(user__username__icontains=q) |
+                Q(user__profile__display_name__icontains=q) |
+                Q(messages__subject__icontains=q) |
+                Q(messages__body__icontains=q)
+            ).distinct()
         # 直近の最後のメッセージとステータス類を添える
         result = []
         for th in qs:
             last = th.messages.order_by('-created_at').first()
             status = "未読"
             if last:
-                # 既読状態: 学生が読んだかどうかで判定
-                if last.is_read_by_user: status = "既読"
-                # 返信あり: 学生→company の送信が存在すれば
-                if th.messages.filter(sender='user').exists(): status = "返信あり"
+                # 既読状態: 最終メッセージの既読フラグに応じて判定
+                # - 最終送信が company の場合は student(s) 側の is_read_by_user を参照
+                # - 最終送信が user の場合は company 側の is_read_by_company を参照
+                if last.sender == 'company':
+                    if last.is_read_by_user: status = "既読"
+                else:
+                    if last.is_read_by_company: status = "既読"
             result.append({
                 "thread_id": str(th.id),
                 "company": th.company.name,
@@ -662,29 +1140,88 @@ class DMThreadDetailView(APIView):
         th = get_object_or_404(DMThread, pk=thread_id)
         if not (th.user == request.user or CompanyMember.objects.filter(company=th.company, user=request.user).exists()):
             raise PermissionDenied("参照できません")
-        msgs = DMMessage.objects.filter(thread=th).order_by('created_at').values(
-            'id','sender','subject','body','created_at','is_read_by_company','is_read_by_user'
-        )
+        msgs_qs = DMMessage.objects.filter(thread=th).order_by('created_at')
+        msgs = []
+        # 判定: 現在のユーザーが会社メンバーかどうか
+        is_company_member = CompanyMember.objects.filter(company=th.company, user=request.user).exists()
+        for m in msgs_qs:
+            # is_mine: company 側ログインかつ送信者が company の場合、
+            # または スレッドの user と現在ユーザーが一致し sender が 'user' の場合
+            if is_company_member and m.sender == 'company':
+                mine = True
+            elif th.user == request.user and m.sender == 'user':
+                mine = True
+            else:
+                mine = False
+            msgs.append({
+                'id': str(m.id),
+                'sender': m.sender,
+                'subject': m.subject,
+                'body': m.body,
+                'created_at': m.created_at.isoformat(),
+                'is_read_by_company': m.is_read_by_company,
+                'is_read_by_user': m.is_read_by_user,
+                'is_mine': mine,
+            })
+
+        # スレッドの相手ユーザー情報を追加して返す
+        user = th.user
+        display_name = getattr(getattr(user, 'profile', None), 'display_name', None) or user.username
         return Response({
-            "thread": {"id": str(th.id), "company": th.company.name, "company_slug": th.company.slug},
-            "messages": list(msgs),
+            "thread": {
+                "id": str(th.id),
+                "company": th.company.name,
+                "company_slug": th.company.slug,
+                "user": {"id": str(user.id), "username": user.username, "display_name": display_name}
+            },
+            "messages": msgs,
         })
+
+
+class MarkThreadReadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, thread_id):
+        th = get_object_or_404(DMThread, pk=thread_id)
+        # アクセス権チェック
+        if not (th.user == request.user or CompanyMember.objects.filter(company=th.company, user=request.user).exists()):
+            raise PermissionDenied("参照できません")
+
+        # 会社ログイン者なら company 宛ての未読フラグを更新（相手が user のメッセージを既読にする）
+        if CompanyMember.objects.filter(company=th.company, user=request.user).exists():
+            DMMessage.objects.filter(thread=th, sender='user', is_read_by_company=False).update(is_read_by_company=True)
+        else:
+            # 学生として開いた場合、会社からのメッセージを既読にする
+            DMMessage.objects.filter(thread=th, sender='company', is_read_by_user=False).update(is_read_by_user=True)
+
+        return Response({'status': 'ok'})
 # ==== Templates / DM ====
 class MessageTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = MessageTemplateSerializer
     permission_classes=[IsAuthenticated]
     def get_queryset(self):
-        qs = MessageTemplate.objects.filter(
-            Q(owner_user=self.request.user) |
-            Q(owner_company__members__user=self.request.user)
-        ).distinct()
+        # 企業は自社テンプレのみ、個人は個人テンプレのみを返す
+        # 会社メンバーが複数社所属するケースは稀だが、所属する最初の会社を採用
+        cm = CompanyMember.objects.filter(user=self.request.user).first()
         owner_company = self.request.query_params.get('company')
+        if cm and not owner_company:
+            return MessageTemplate.objects.filter(owner_company=cm.company).order_by('-created_at')
+        # クエリで company 指定があればそれを優先（管理用途など）
         if owner_company:
-            qs = qs.filter(owner_company_id=owner_company)
-        return qs
+            return MessageTemplate.objects.filter(owner_company_id=owner_company).order_by('-created_at')
+        # デフォルトは個人テンプレ
+        return MessageTemplate.objects.filter(owner_user=self.request.user).order_by('-created_at')
     def perform_create(self, serializer):
         # company or user のどちらかで作成できる
-        return serializer.save(owner_user=self.request.user) if not serializer.validated_data.get('owner_company') else serializer.save()
+        # 優先順: 明示的に owner_company があればそれを使う。なければログインユーザーが会社メンバーなら会社所有で保存。
+        if serializer.validated_data.get('owner_company'):
+            return serializer.save()
+        # 会社メンバーであれば最初の所属会社を owner_company にする
+        cm = CompanyMember.objects.filter(user=self.request.user).first()
+        if cm:
+            return serializer.save(owner_company=cm.company)
+        # それ以外はユーザー所有として保存
+        return serializer.save(owner_user=self.request.user)
 
 class DMThreadViewSet(viewsets.ModelViewSet):
     serializer_class = DMThreadSerializer
@@ -697,13 +1234,52 @@ class DMThreadViewSet(viewsets.ModelViewSet):
         company_id = self.request.query_params.get('company')
         if company_id:
             qs = qs.filter(company_id=company_id)
+        # 検索パラメータ q をサポート（会社名、ユーザー名、メッセージ件名/本文）
+        q = (self.request.query_params.get('q') or '').strip()
+        if q:
+            qs = qs.filter(
+                Q(company__name__icontains=q) |
+                Q(user__username__icontains=q) |
+                Q(user__profile__display_name__icontains=q) |
+                Q(messages__subject__icontains=q) |
+                Q(messages__body__icontains=q)
+            ).distinct()
         return qs
     def perform_create(self, serializer):
         comp = serializer.validated_data['company']
         # 会社側のみスレッド作成許可（企業→学生への最初のDM）
         if not CompanyMember.objects.filter(company=comp, user=self.request.user).exists():
             raise PermissionDenied("会社メンバーのみ作成できます")
-        serializer.save()
+
+        # プラン残数があるかを確認し、トランザクション内で減算してからスレッド作成
+        from django.utils import timezone as _tz
+        today = _tz.localdate()
+        try:
+            with transaction.atomic():
+                # 優先: 有効期間内のプラン。なければ最新プランを参照
+                plan = (CompanyPlan.objects
+                        .filter(company=comp)
+                        .filter(Q(active_from__lte=today))
+                        .filter(Q(active_to__isnull=True) | Q(active_to__gte=today))
+                        .order_by('-active_from')
+                        .first())
+                if not plan:
+                    plan = CompanyPlan.objects.filter(company=comp).order_by('-active_from').first()
+
+                if plan:
+                    # 残数が None の場合は monthly_quota を初期値として扱う
+                    if plan.remaining is None:
+                        plan.remaining = int(plan.monthly_quota or 0)
+                    if plan.remaining <= 0:
+                        raise PermissionDenied("送信可能な残り件数がありません。プランを確認してください。")
+                    # 減算
+                    plan.remaining = plan.remaining - 1
+                    plan.save(update_fields=['remaining'])
+
+                serializer.save()
+        except IntegrityError:
+            # 競合等で失敗した場合は適切に PermissionDenied を投げる
+            raise PermissionDenied("スレッド作成に失敗しました（競合または残数不足の可能性）。")
 
 class DMMessageViewSet(viewsets.ModelViewSet):
     serializer_class = DMMessageSerializer
@@ -913,6 +1489,9 @@ class PublicProfileByNameView(APIView):
     def get(self, request, username):
         user = get_object_or_404(User, username=username)
         prof = getattr(user, 'profile', None)
+        # 非学生アカウントはパブリックプロフィールを持たない
+        if getattr(user, 'account_type', None) not in ('student', 'both'):
+            return Response({'detail': 'not found'}, status=404)
         if not prof or not prof.is_public:
             return Response({'detail':'not public'}, status=404)
         return Response(UserProfileSerializer(prof, context={'request': request}).data)

@@ -1,16 +1,33 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import "./companydash.css";
-
-const LANGS = ["Python","JavaScript","TypeScript","Java","Go","C"];
+import LanguageModalPicker from "../../AddRecords/LanguageBubblPicker";
+import { api } from "../../../api";
 
 export default function FiltersBar({ value, onChange, onSaveCond }) {
   const v = value;
   const set = (k, val) => onChange?.({ ...v, [k]: val });
 
-  const toggleLang = (lang) => {
-    const s = new Set(v.languages);
-    s.has(lang) ? s.delete(lang) : s.add(lang);
-    set("languages", [...s]);
+  const [langsOptions, setLangsOptions] = useState([]); // [{id,name}]
+
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      try {
+        const data = await api('/master/languages/', { method: 'GET' });
+        if (!ignore) setLangsOptions(Array.isArray(data) ? data : (data?.results || []));
+      } catch (e) {
+        if (!ignore) setLangsOptions([]);
+      }
+    })();
+    return () => { ignore = true; };
+  }, []);
+
+  // LanguageModalPicker は id 配列を返すため、ここで相互変換を行う。
+  // サーバ検索では slug を使うので、filters.languages には slug の配列を保持する。
+  const selectedIds = (v.languages || []).map(slug => langsOptions.find(l => l.slug === slug)?.id).filter(Boolean);
+  const onLangIdsChange = (ids) => {
+    const slugs = ids.map(id => langsOptions.find(l => l.id === id)?.slug).filter(Boolean);
+    set('languages', slugs);
   };
 
   return (
@@ -18,19 +35,26 @@ export default function FiltersBar({ value, onChange, onSaveCond }) {
       <div className="row g-3 align-items-end">
         <div className="col-12 col-xxl-4">
           <label className="form-label">言語（複数選択）</label>
-          <div className="lstack">
-            {LANGS.map(l => (
-              <button
-                key={l}
-                type="button"
-                className={`chip-btn ${v.languages.includes(l) ? "is-on" : ""}`}
-                onClick={()=>toggleLang(l)}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-          <div className="form-hint">クリックでON/OFF（複数可）</div>
+          <LanguageModalPicker
+            languages={langsOptions}
+            value={selectedIds}
+            onChange={onLangIdsChange}
+            disabled={!langsOptions.length}
+            buttonLabel="言語を選ぶ"
+          />
+          <div className="form-hint">マスター言語から選択してください（複数可）</div>
+        </div>
+
+        <div className="col-12 col-xxl-4">
+          <label className="form-label">キーワード検索</label>
+          <input
+            type="search"
+            className="form-control"
+            placeholder="ユーザー名・表示名で検索"
+            value={v.q ?? ""}
+            onChange={(e)=>set("q", e.target.value)}
+          />
+          <div className="form-hint">部分一致で検索します（例: ユーザー名、表示名）</div>
         </div>
 
         <div className="col-6 col-md-2">
@@ -58,7 +82,10 @@ export default function FiltersBar({ value, onChange, onSaveCond }) {
           <label className="form-label">学年</label>
           <select className="form-select" value={v.grade} onChange={(e)=>set("grade", e.target.value)}>
             <option value="">指定なし</option>
-            <option>1年</option><option>2年</option><option>3年</option><option>4年</option>
+            <option value="1">1年</option>
+            <option value="2">2年</option>
+            <option value="3">3年</option>
+            <option value="4">4年</option>
           </select>
         </div>
 
@@ -70,15 +97,7 @@ export default function FiltersBar({ value, onChange, onSaveCond }) {
           </select>
         </div>
 
-        <div className="col-6 col-md-2">
-          <label className="form-label">公開ステータス</label>
-          <select className="form-select" value={v.visibility} onChange={(e)=>set("visibility", e.target.value)}>
-            <option value="">すべて</option>
-            <option>企業のみ</option>
-            <option>全体公開</option>
-            <option>非公開</option>
-          </select>
-        </div>
+        {/* 公開ステータスフィルタは不要のため削除 */}
 
         <div className="col-6 col-md-2">
           <label className="form-label">ソート</label>

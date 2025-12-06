@@ -14,7 +14,7 @@ export default function ScoutList({ items, onPick, quickFilter, setQuickFilter }
           <span className="chip">今月 <strong>{thisMonth}</strong></span>
         </div>
         <div className="btn-group btn-group-sm" role="group" aria-label="filters">
-          {["すべて","未読","返信あり"].map(lbl=>(
+          {["すべて","未読","既読"].map(lbl=>(
             <button
               key={lbl}
               className={`btn btn-outline-secondary ${quickFilter===lbl ? "active":""}`}
@@ -35,7 +35,7 @@ export default function ScoutList({ items, onPick, quickFilter, setQuickFilter }
           >
             <div className="pt-1">
               <span className={`status-dot ${{
-                "未読":"status-unread","既読":"status-read","返信あり":"status-replied","辞退":"status-declined"
+                "未読":"status-unread","既読":"status-read","辞退":"status-declined"
               }[it.status]||"status-read"}`} />
             </div>
             <div className="flex-grow-1">

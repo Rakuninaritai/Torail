@@ -11,6 +11,7 @@
     "start": "vite preview --host 0.0.0.0 --port $PORT"
   },
   "dependencies": {
+    "@stripe/stripe-js": "^8.5.3",
     "axios": "^1.8.2",
     "chart.js": "^4.4.9",
     "react": "^19.0.0",

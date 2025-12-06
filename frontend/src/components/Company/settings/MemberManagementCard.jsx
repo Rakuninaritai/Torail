@@ -4,7 +4,8 @@ import { api } from "../../../api";
 
 export default function MemberManagementCard({ isAdmin, companyId }) {
   const [members, setMembers] = useState([]);     // [{id, user:{id,username,email,account_type}, role}]
-  const [email, setEmail] = useState("");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]); // search results from username API
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState("");
@@ -27,21 +28,42 @@ export default function MemberManagementCard({ isAdmin, companyId }) {
     return () => { ignore = true; };
   }, [companyId]);
 
-  // 招待: メール（既ユーザーが前提）
-  const inviteByEmail = async () => {
-    if (!email.trim() || posting) return;
+  // 招待: ユーザー名検索 -> 選択で追加
+  useEffect(() => {
+    let mounted = true;
+    let t = null;
+    if ((query || '').trim().length >= 2) {
+      // 簡易デバウンス
+      t = setTimeout(async () => {
+        try {
+          const res = await api(`/users/search_by_username/?q=${encodeURIComponent(query.trim())}`, { method: 'GET' });
+          if (!mounted) return;
+          setResults(res || []);
+        } catch {
+          if (!mounted) return;
+          setResults([]);
+        }
+      }, 300);
+    } else {
+      setResults([]);
+    }
+    return () => { mounted = false; if (t) clearTimeout(t); };
+  }, [query]);
+
+  const inviteByUserId = async (user) => {
+    if (posting) return;
     try {
       setPosting(true);
       setErr("");
-      await api(`/companies/${companyId}/invite_by_email/`, {
+      await api(`/company_members/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({ company: companyId, user: user.id, role: 'member' }),
       });
-      // 追加後に再取得（正確）
       const res = await api(`/company_members/?company=${companyId}`, { method: "GET" });
       setMembers(res?.results || res || []);
-      setEmail("");
+      setQuery("");
+      setResults([]);
     } catch (e) {
       const msg = e?.response?.data?.detail || "招待に失敗しました（既に所属済み/存在しない/権限不足の可能性）";
       setErr(msg);
@@ -68,17 +90,30 @@ export default function MemberManagementCard({ isAdmin, companyId }) {
 
       {isAdmin && (
         <>
-          <div className="input-group mb-2">
+          <div className="mb-2">
             <input
               className="form-control"
-              placeholder="メールアドレスで招待"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="ユーザー名で検索（英数字） 例: yamam"
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setErr(""); }}
             />
-            <button className="btn btn-primary" disabled={posting} onClick={inviteByEmail}>
-              追加
-            </button>
+            <div className="small text-muted mt-1">学籍アカウント（student）は検索対象に含めません</div>
           </div>
+          {results.length > 0 && (
+            <ul className="list-group mb-2">
+              {results.map(u => (
+                <li key={u.id} className="list-group-item d-flex align-items-center justify-content-between">
+                  <div>
+                    <div><strong>{u.username}</strong> <span className="text-muted">{u.email}</span></div>
+                    <div className="small text-secondary">{u.account_type}</div>
+                  </div>
+                  <div>
+                    <button className="btn btn-sm btn-primary" disabled={posting} onClick={() => inviteByUserId(u)}>追加</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
           {err && <div className="text-danger small mb-2">{err}</div>}
         </>
       )}

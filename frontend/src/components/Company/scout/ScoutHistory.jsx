@@ -18,7 +18,6 @@ export default function ScoutHistory({
   const counts = {
     未読: conversations.filter((c) => c.status === "未読").length,
     既読: conversations.filter((c) => c.status === "既読").length,
-    返信あり: conversations.filter((c) => c.status === "返信あり").length,
     辞退: conversations.filter((c) => c.status === "辞退").length,
   };
 
@@ -33,7 +32,7 @@ export default function ScoutHistory({
           onChange={(e) => setQuery(e.target.value)}
         />
         <div className="btn-group mb-2 flex-wrap">
-          {["all", "未読", "既読", "返信あり", "辞退"].map((f) => (
+          {["all", "未読", "既読", "辞退"].map((f) => (
             <button
               key={f}
               className={`btn btn-sm ${

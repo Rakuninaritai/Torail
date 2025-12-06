@@ -224,6 +224,7 @@ AUTH_USER_MODEL = 'main.User'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
        'main.authentication.CookieJWTAuthentication', 
+         'rest_framework_simplejwt.authentication.JWTAuthentication',
         # 'dj_rest_auth.jwt_auth.JWTCookieAuthentication',    
        # ブラウザでのデバッグ用に SessionAuthentication を残す場合 
     #    'rest_framework.authentication.SessionAuthentication', 
@@ -342,3 +343,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 REST_AUTH_SERIALIZERS = {
     "USER_DETAILS_SERIALIZER": "main.serializers.UserSerializer",
 }
+# Stripe設定
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")     # シークレットキー
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")  # 公開可能キー
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")  # ウェブフックシークレット

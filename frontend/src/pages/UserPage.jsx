@@ -149,6 +149,7 @@ export default function UserPage({ token }) {
       school: pub.school || "",
       grade: pub.grade || "",
       pref: pub.prefecture || "",
+      gradYear: pub.grad_year || "",
       avatarUrl: pub.avatar_url || "",
       // 閲覧時の SNS: backend は icon_class と url。label は省略（title 属性で代替）
       sns: (pub.sns_links || []).map(s => ({ label: '', url: s.url, icon: s.icon_class })),
@@ -173,6 +174,7 @@ export default function UserPage({ token }) {
       fd.append("display_name", draft.displayName || "");
       fd.append("school", draft.school || "");
       fd.append("grade", draft.grade || "");
+      fd.append("grad_year", draft.gradYear || "");
       fd.append("prefecture", draft.pref || "");
       if (draft._avatarFile) {
         fd.append("avatar", draft._avatarFile); // ← 画像

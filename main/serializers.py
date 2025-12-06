@@ -322,12 +322,13 @@ class UserProfileSerializer(serializers.ModelSerializer):
     tech_areas      = TechAreaSerializer(many=True, read_only=True)
     product_domains = ProductDomainSerializer(many=True, read_only=True)
     languages       = LanguageMasterSerializer(many=True, read_only=True)
+    grad_year = serializers.CharField(read_only=True)
     sns_links       = UserSNSSerializer(many=True, read_only=True, source='user.sns_links')
     portfolio_items = PortfolioItemSerializer(many=True, read_only=True, source='user.portfolio_items')
     class Meta:
         model  = UserProfile
         fields = [
-            'id','display_name','school','prefecture','grade','bio','vision','is_public',
+            'id','display_name','school','prefecture','grade','bio','vision','is_public','grad_year',
             'desired_jobs','tech_areas','product_domains','languages',
             'sns_links','portfolio_items','avatar_url'
         ]
@@ -344,10 +345,11 @@ class UserProfileWriteSerializer(serializers.ModelSerializer):
     tech_areas      = serializers.PrimaryKeyRelatedField(queryset=TechArea.objects.all(), many=True, required=False)
     product_domains = serializers.PrimaryKeyRelatedField(queryset=ProductDomain.objects.all(), many=True, required=False)
     languages       = serializers.PrimaryKeyRelatedField(queryset=LanguageMaster.objects.filter(is_active=True), many=True, required=False)
+    grad_year = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model  = UserProfile
-        fields = ['display_name','school','prefecture','grade','bio','vision','is_public','desired_jobs','tech_areas','product_domains','languages']
+        fields = ['display_name','school','prefecture','grade','bio','vision','is_public','desired_jobs','tech_areas','product_domains','languages','grad_year']
 
     def update(self, instance, validated_data):
         m2m_fields = ['desired_jobs','tech_areas','product_domains','languages']
@@ -458,7 +460,7 @@ class CompanySerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Company
-        fields = ['id','name','slug','industry','website','description','logo_url','owner','created_at']  # ← slug 追加
+        fields = ['id','name','slug','industry','website','description','logo_url','is_public','show_hirings','owner','created_at']  # ← slug 追加
         read_only_fields = ['owner','created_at']
 
     def validate_slug(self, v):
@@ -486,7 +488,7 @@ class CompanyMemberSerializer(serializers.ModelSerializer):
 class CompanyPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model  = CompanyPlan
-        fields = ['id','company','plan_type','monthly_quota','price_jpy','active_from','active_to']
+        fields = ['id','company','plan_type','monthly_quota','price_jpy','active_from','active_to','remaining']
 
 class CompanyHiringSerializer(serializers.ModelSerializer):
     class Meta:
@@ -504,7 +506,8 @@ class CompanyHiringPublicSerializer(serializers.ModelSerializer):
         model = CompanyHiring
         fields = ['title','detail','tech_stack','location','employment_type','created_at']
 class CandidateBriefSerializer(serializers.Serializer):
-    user_id = serializers.IntegerField()
+    # User ID is a UUID in the data model; use UUIDField to ensure it's serialized as a string
+    user_id = serializers.UUIDField()
     username = serializers.CharField()
     display_name = serializers.CharField()
     school = serializers.CharField(allow_blank=True, required=False)

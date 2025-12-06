@@ -1,4 +1,35 @@
-// components/SlackPanel.jsx
+// ============================================================
+// Slack 連携設定パネル - React コンポーネント
+// ============================================================
+//
+// 【役割】
+// -------
+// フロント側の Slack 連携設定 UI。
+// 以下の機能を提供：
+//   1. Slack ワークスペースに接続
+//   2. チャンネル一覧を取得・選択
+//   3. 通知先チャンネルを保存
+//   4. テスト送信で動作確認
+//
+// 【フロー】
+// --------
+// 1. 「Slack に接続」ボタン
+//    → window.location.assign(バックエンド OAuth URL)
+//    → ユーザーが Slack で認可
+//    → slack_callback でリダイレクト
+//    → ?slack=connected で戻ってくる
+//
+// 2. URLパラメータから slack=connected を検出
+//    → handleFetchChannels() を自動実行
+//    → チャンネル一覧をバックエンドから取得
+//
+// 3. プルダウンからチャンネル選択
+//    → 「保存」ボタンで DB に保存
+//
+// 4. 「テスト送信」で動作確認
+//    → テストメッセージが Slack に投稿される
+//
+
 import { useState, useEffect } from "react";
 import { api } from "../../api";
 import { toast } from "react-toastify";
@@ -6,16 +37,33 @@ import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
 
 export default function SlackPanel({ teamId, enabled }) {
+  // ==========================================
+  // State 管理
+  // ==========================================
   const [hydrating, setHydrating] = useState(true); // 初期取得中フラグ
   const [loading, setLoading] = useState(false);
-  const [connected, setConnected] = useState(false);
-  const [status, setStatus] = useState(null);
-  const [channels, setChannels] = useState([]);
-  const [selected, setSelected] = useState("");
+  const [connected, setConnected] = useState(false);    // 接続済みか？
+  const [status, setStatus] = useState(null);          // ワークスペース情報
+  const [channels, setChannels] = useState([]);         // チャンネル一覧
+  const [selected, setSelected] = useState("");         // 選択中のチャンネルID
 
   const BACKEND_ORIGIN = import.meta.env.VITE_BACKEND_ORIGIN || "http://localhost:8000";
 
+  // ==========================================
+  // 接続ステータス取得
+  // ==========================================
   const fetchStatus = async () => {
+    /**
+     * バックエンド /integrations/slack/status/ から
+     * 現在の接続状態を取得。
+     * 
+     * 返す値：
+     * {
+     *   connected: true/false,
+     *   workspace: {id, name},
+     *   channel: {id, name}
+     * }
+     */
     try {
       const data = await api(`/integrations/slack/status/?team_id=${teamId}`, { method: "GET" });
       if (data.ok && data.connected) {
@@ -32,18 +80,27 @@ export default function SlackPanel({ teamId, enabled }) {
     }
   };
 
+  // ==========================================
+  // 初期化 & OAuth 戻り処理
+  // ==========================================
   useEffect(() => {
     if (!teamId) return;
     let mounted = true;
     const init = async () => {
       setHydrating(true);
       try {
-        // ?slack=connected 対応
+        // URL に ?slack=connected が付いているか確認
+        // (slack_callback から戻ってきた合図)
         const params = new URLSearchParams(window.location.search);
         const ok = params.get("slack");
+        
+        // 現在の接続状態を取得
         await fetchStatus();
+        
+        // 新たに接続された場合、チャンネル一覧を自動取得
         if (ok === "connected") {
           await handleFetchChannels();
+          // URL を整形して履歴から削除
           params.delete("slack");
           const qs = params.toString();
           window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
@@ -54,16 +111,27 @@ export default function SlackPanel({ teamId, enabled }) {
     };
     init();
     return () => { mounted = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId]);
 
+  // ==========================================
+  // ハンドラー関数群
+  // ==========================================
+
   const handleConnect = () => {
+    /**
+     * 「Slack に接続」ボタンのクリック。
+     * バックエンド OAuth URL へ遷移。
+     */
     if (!teamId) return toast.error("チームが選択されていません。");
     const url = `${BACKEND_ORIGIN}/api/integrations/slack/connect/?team_id=${encodeURIComponent(teamId)}`;
-    window.location.assign(url);
+    window.location.assign(url);  // ← フルページ遷移
   };
 
   const handleFetchChannels = async () => {
+    /**
+     * バックエンド /integrations/slack/channels/ から
+     * チャンネル一覧を取得。
+     */
     if (!teamId) return toast.error("チームが選択されていません。");
     setLoading(true);
     try {
@@ -86,6 +154,10 @@ export default function SlackPanel({ teamId, enabled }) {
   };
 
   const handleSaveChannel = async () => {
+    /**
+     * 選択したチャンネルID をバックエンドに保存。
+     * /integrations/slack/save_channel/ に POST
+     */
     if (!selected) return toast.error("チャンネルを選択してください。");
     setLoading(true);
     try {
@@ -100,6 +172,10 @@ export default function SlackPanel({ teamId, enabled }) {
   };
 
   const handleTest = async () => {
+    /**
+     * テストメッセージ送信。
+     * /integrations/slack/test/ に POST
+     */
     setLoading(true);
     try {
       const data = await api(`/integrations/slack/test/?team_id=${teamId}`, { method: "POST" });
@@ -112,7 +188,10 @@ export default function SlackPanel({ teamId, enabled }) {
     }
   };
 
-  // 初期ロード中はSkeletonのみ
+  // ==========================================
+  // レンダリング
+  // ==========================================
+
   if (hydrating) {
     return <Skeleton height={220} />;
   }

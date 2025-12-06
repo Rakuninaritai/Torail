@@ -1,4 +1,34 @@
-# main/tasks.py
+# ============================================================
+# Celery 非同期タスク - 通知実行エンジン
+# ============================================================
+#
+# 【概要】
+# -------
+# signals.py で Celery キューに追加されたタスクを実際に「実行」する場所。
+# 以下の3つの通知方式をサポート：
+#   1. メール送信（Django の EmailMultiAlternatives）
+#   2. Slack 送信（slack_sdk ライブラリ経由）
+#   3. Discord 送信（API 直叩き）
+#
+# 【実行フロー再掲】
+# --------
+# 1. dispatch_record_notification.delay(record_id)
+#    ↓ Celery Worker が取得
+# 2. _choose_modes(rec) で送信先を決定
+#    - team.notify_mode を参照
+#    - 設定された通知方式が利用可能か確認
+#    ↓
+# 3. 該当タスクを .delay() で追加
+#    - send_record_notification.delay(record_id)      # メール
+#    - notify_slack_team.delay(record_id)             # Slack
+#    - notify_discord_team.delay(record_id)           # Discord
+#    それぞれの処理は各viewsを参照
+#    ↓ Worker が実行
+# 4. 実際にメール/API 呼び出しを実行
+#    ↓
+# 5. ユーザー通知完了！
+#
+
 from __future__ import annotations
 
 import datetime as _dt
@@ -18,19 +48,25 @@ import requests
 
 logger = get_task_logger(__name__)
 
-# ------------------------------
-# 共通ヘルパ
-# ------------------------------
+# ============================================================
+# ヘルパ関数群（データ整形・フォーマット）
+# ============================================================
+
 def _fmt_time(t):
+    """
+    時間を HH:MM 形式で整形。
+    """
     if not t:
         return "-"
     if isinstance(t, _dt.datetime):
         t = timezone.localtime(t)
     return t.strftime("%H:%M")
-# ---------- 1) 追加: 言語整形ヘルパ ----------
+
 def _fmt_langs(rec: Record) -> str:
     """
     Record.languages の名前を '、' 区切りで返す。無ければ '-'
+    
+    複数の言語に対応（例："JavaScript、Python、Go"）
     """
     try:
         names = list(rec.languages.values_list('name', flat=True))
@@ -41,18 +77,33 @@ def _fmt_langs(rec: Record) -> str:
     return "、".join(names) if names else "-"
 
 def _minutes(ms) -> float:
+    """
+    ミリ秒を分に変換。
+    """
     try:
         return 0.0 if not ms or ms <= 0 else ms / 60000.0
     except Exception:
         return 0.0
 
 def _fmt_minutes(ms) -> str:
-    # 表示用（小数1桁）
-    return f"{_minutes(ms):.1f}"
-def _email_recipients(rec: Record) -> list[str]:
-
     """
-    本人以外のメンバーのメールを厳しめに抽出（空文字/空白/NULLを除外）。
+    ミリ秒を分で表示（小数1桁）。
+    例：120000ms → "2.0"
+    """
+    return f"{_minutes(ms):.1f}"
+
+def _email_recipients(rec: Record) -> list[str]:
+    """
+    チームメンバーのメールを抽出（本人は除外）。
+    
+    【フィルタ】
+    - 本人を除外（exclude(user=rec.user)）
+    - 空またはNULLを除外
+    - 空白のみも除外
+    
+    【返す値】
+    バリデーション済みメールリスト
+    例：["user1@example.com", "user2@example.com"]
     """
     qs = (
         TeamMembership.objects
@@ -71,6 +122,15 @@ def _email_recipients(rec: Record) -> list[str]:
     return recipients
 
 def _ascii_table_for_slack(rec: Record) -> str:
+    """
+    Slack 用の ASCII テーブル形式テキストを生成。
+    例：
+    +----------+-----------+
+    | ユーザー | user1     |
+    | トピック | Python    |
+    +----------+-----------+
+    ...
+    """
     rows = [
         ("ユーザー",   rec.user.username),
         ("トピック",       rec.subject.name),
@@ -91,8 +151,30 @@ def _ascii_table_for_slack(rec: Record) -> str:
 
 def _get_available_providers(rec: Record) -> List[str]:
     """
-    チームの Integration とメール到達性から、利用可能なチャンネルを列挙。
-    候補: 'slack', 'discord', 'email'
+    【役割】
+    --------
+    チーム設定から「実際に利用可能な通知方式」を判定。
+    
+    【判定ロジック】
+    ---------------
+    1. Slack
+       → Integration.objects.filter(team=rec.team, provider="slack")
+       → Access Token が登録されているか？
+       → YES ならサポート対象
+    
+    2. Discord
+       → Integration.objects.filter(team=rec.team, provider="discord")
+       → Bot Token + channel_id が登録されているか？
+       → YES ならサポート対象
+    
+    3. メール
+       → _email_recipients(rec) が空でないか？
+       → チームメンバー（本人以外）が有効なメール持ってるか？
+       → YES ならサポート対象
+    
+    【返す値】
+    ['slack', 'discord', 'email'] の部分集合。
+    例：['slack', 'email']
     """
     provs = set()
     if rec.team:
@@ -107,10 +189,29 @@ def _get_available_providers(rec: Record) -> List[str]:
 
 def _choose_modes(rec: Record) -> List[str]:
     """
-    送信先選択:
-      1) team.notify_mode が 'slack'/'discord'/'email' のとき → その1つだけ（利用不可なら空）
-      2) 'off' → 送らない
-      3) 'auto'（既定） → 既存の優先度 CSV（settings or team側に将来拡張）で1つだけ
+    【重要な関数】送信先を「1つ」選定。
+    
+    【ロジック】
+    -----------
+    Team.notify_mode の値に基づいて送信先を決定：
+    
+    A. mode = 'slack' / 'discord' / 'email'
+       → その通知方式「のみ」を使う
+       → ただし利用不可ならスキップ
+    
+    B. mode = 'off'
+       → 通知なし
+    
+    C. mode = 'auto' または未設定
+       → 優先度 CSV に従って「最初に利用可能なもの」を選ぶ
+       → デフォルト優先度：settings.TORAIL_NOTIFY_PRIORITY
+       → 例："slack,email,discord"
+       → 読み方：Slack が使えたら Slack、
+         使えなければメール、それも無ければ Discord
+    
+    【返す値】
+    ['slack'] / ['email'] / ['discord'] のいずれか
+    または [] (通知なし)
     """
     available = set(_get_available_providers(rec))
     if not available:
@@ -125,18 +226,55 @@ def _choose_modes(rec: Record) -> List[str]:
     if mode == "off":
         return []
 
-    # auto
+    # auto: 優先度 CSV から「利用可能な最初のもの」を選ぶ
     prio_csv = getattr(settings, "TORAIL_NOTIFY_PRIORITY", "slack,email,discord")
     for m in [p.strip() for p in prio_csv.split(",") if p.strip()]:
         if m in available:
             return [m]
     return []
 
-# ------------------------------
-# メール
-# ------------------------------
+
+# ============================================================
+# メール通知タスク
+# ============================================================
 @shared_task(name="record_notification.send")
 def send_record_notification(record_id: str) -> None:
+    """
+    【役割】
+    --------
+    メール通知を送信。
+    
+    【処理フロー】
+    -----------
+    1. record_id から Record を取得
+       - timer_state=2 のみ対象（完了状態）
+       - 関連データを select_related/prefetch_related で効率化
+    
+    2. 送信先を取得
+       - _email_recipients(record) でチームメンバーを抽出
+       - 本人・空メールは自動除外
+    
+    3. HTMLメール本文を生成
+       - templates/mail/record_done.html を使用
+       - トピック・タスク・言語・時間を含める
+    
+    4. EmailMultiAlternatives で送信
+       - テキスト版 + HTML版 の両対応
+       - メールクライアントの環境に応じて表示
+    
+    5. 送信成功/失敗をログ出力
+    
+    【エラーハンドリング】
+    ------------------
+    - Record が見つからない → return（通知なし）
+    - 送信先が空 → return（チームメンバーなし）
+    - SMTP 接続失敗 → 例外をログ + raise
+    
+    【Celery リトライ】
+    ---------------
+    このタスクにはリトライ設定なし。
+    失敗時は一度だけ実行。
+    """
     logger.info(f"📬 send_record_notification start: record_id={record_id}")
 
     record = (
@@ -188,11 +326,63 @@ def send_record_notification(record_id: str) -> None:
     except Exception as e:
         logger.error(f"❌ メール送信失敗: {e}", exc_info=True)
 
-# ------------------------------
-# Slack（ASCII表）
-# ------------------------------
-@shared_task(autoretry_for=(Exception,), retry_backoff=True, max_retries=5, name="record_notification.slack")
+
+# ============================================================
+# Slack 通知タスク
+# ============================================================
+@shared_task(
+    autoretry_for=(Exception,),      # 例外発生時、自動リトライ
+    retry_backoff=True,              # 指数バックオフ（1秒 → 2秒 → 4秒...）
+    max_retries=5,                   # 最大5回までリトライ
+    name="record_notification.slack"
+)
 def notify_slack_team(record_id: str) -> bool:
+    """
+    【役割】
+    --------
+    Slack チャンネルにメッセージを送信。
+    
+    【処理フロー】
+    -----------
+    1. Record を取得（timer_state=2）
+    2. Team に紐づく Slack Integration を確認
+       - access_token（Bot Token）があるか？
+       - channel_id が設定されているか？
+    3. slack_sdk.WebClient で Slack API を呼び出し
+    4. blocks 形式で見栄え良いメッセージを構築
+       - Section + Fields でレイアウト
+       - Mrkdwn（Markdown 風）でテキスト装飾
+    5. 成功/失敗をログ出力
+    
+    【Block Kit Format】
+    -----------------
+    Slack の Block Kit は JSON ベースのメッセージ構造。
+    以下のような見栄え：
+    
+    +------ 【Torail】user1さんがタイマーを完了... ------+
+    | ユーザー: user1         | トピック: Python          |
+    | タスク: 関数実装         | 合計(分): 15.5            |
+    | 開始: 14:00             | 終了: 14:15               |
+    +-----------------------------------------------------+
+    | 言語: JavaScript、Python
+    | 内容: (もあれば)
+    |
+    | 詳細: https://torail.app/records/xxx
+    +-----------------------------------------------------+
+    
+    【リトライ設定】
+    ---------------
+    max_retries=5 で、失敗時は最大5回まで再実行。
+    指数バックオフで、間隔が徐々に広がる。
+    例：1秒後 → 3秒後 → 7秒後 → 15秒後 → 31秒後
+    
+    これにより Slack API の一時的な障害に耐える。
+    
+    【戻り値】
+    --------
+    bool: 成功時 True、失敗時 False
+    （リトライ失敗時は例外が上がる）
+    """
     rec = (
         Record.objects
         .select_related("user", "subject", "task", "team")
@@ -209,18 +399,22 @@ def notify_slack_team(record_id: str) -> bool:
 
     lang_txt = _fmt_langs(rec)
     client = WebClient(token=integ.access_token)
+    # chat.postMessage で Block Kit メッセージを送信
     client.chat_postMessage(
         channel=integ.channel_id,
-    text="Torail 完了通知",
-    blocks=[
-        {"type": "section", "text": {"type": "mrkdwn",
-         "text": f"*【Torail】{rec.user.username} さんがタイマーを完了しました（チーム: {rec.team.name}）*"}},
-        {"type": "section", "fields": [
-            {"type": "mrkdwn", "text": f"*ユーザー*\n{rec.user.username}"},
-            {"type": "mrkdwn", "text": f"*トピック*\n{rec.subject.name}"},
-            {"type": "mrkdwn", "text": f"*タスク*\n{rec.task.name}"},
-            {"type": "mrkdwn", "text": f"*合計(分)*\n{_fmt_minutes(rec.duration)}"},
-            {"type": "mrkdwn", "text": f"*開始*\n{_fmt_time(rec.start_time)}"},
+        text="Torail 完了通知",  # フォールバック（Block Kit 非対応クライアント向け）
+        blocks=[
+            # タイトルセクション
+            {"type": "section", "text": {"type": "mrkdwn",
+             "text": f"*【Torail】{rec.user.username} さんがタイマーを完了しました（チーム: {rec.team.name}）*"}},
+            
+            # フィールド（2列レイアウト）
+            {"type": "section", "fields": [
+                {"type": "mrkdwn", "text": f"*ユーザー*\n{rec.user.username}"},
+                {"type": "mrkdwn", "text": f"*トピック*\n{rec.subject.name}"},
+                {"type": "mrkdwn", "text": f"*タスク*\n{rec.task.name}"},
+                {"type": "mrkdwn", "text": f"*合計(分)*\n{_fmt_minutes(rec.duration)}"},
+                {"type": "mrkdwn", "text": f"*開始*\n{_fmt_time(rec.start_time)}"},
             {"type": "mrkdwn", "text": f"*終了*\n{_fmt_time(rec.end_time)}"},
         ]},
         # 言語は別セクションで1行表示（フィールドに混ぜると列ズレしがち）
@@ -239,15 +433,39 @@ def notify_slack_team(record_id: str) -> bool:
     logger.info(f"✅ Slack post ok: team={rec.team_id} channel={integ.channel_id}")
     return True
 
-# ------------------------------
-# Discord（Bot）
-# ------------------------------
+# ============================================================
+# Discord 通知タスク
+# ============================================================
 def _discord_embed_for_record(rec: Record) -> dict:
     """
-    Web/モバイル両方で崩れにくいEmbed
-    - 可変長は inline にしない
-    - inline は常に2個1組（開始/終了）
-    - URLはtitleに付与（可能なら本番は https）
+    【役割】
+    --------
+    Discord の Embed（埋め込み）フォーマットを生成。
+    
+    【Embed 特性】
+    ---------------
+    - Web とモバイル両方で対応（レスポンシブ）
+    - title + description + fields で構成
+    - inline フィールドは 2個1組で見栄え良く配置
+    - 可変長フィールド（言語・内容）は inline=False で1行表示
+    
+    【生成例】
+    -----------
+    +------------------------------------------+
+    | 【Torail】user1さんがタイマー完了...    |
+    |                                          |
+    | ユーザー: user1                         |
+    | トピック: Python基礎                    |
+    |                                          |
+    | 開始: 14:00  | 終了: 14:15              |
+    | 合計(分): 15.5                          |
+    | 言語: Python、JavaScript                |
+    |                                          |
+    | Torail                                   |
+    +------------------------------------------+
+    
+    【戻り値】
+    dict: JSON シリアライズ可能な Embed 辞書
     """
     title = f"【Torail】{rec.user.username} さんがタイマーを完了しました（チーム: {rec.team.name}）"
     url = f"{settings.FRONTEND_URL.rstrip('/')}/records/{rec.id}"
@@ -284,11 +502,63 @@ def _discord_embed_for_record(rec: Record) -> dict:
     }
 
 
-@shared_task(autoretry_for=(Exception,), retry_backoff=True, max_retries=5, name="record_notification.discord")
+@shared_task(
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=5,
+    name="record_notification.discord"
+)
 def notify_discord_team(record_id: str) -> bool:
     """
-    provider='discord' の Integration 経由で、Bot Token を使って
-    指定 channel_id にメッセージを送る（Webhookは使わない）。
+    【役割】
+    --------
+    Discord チャンネルにメッセージを送信。
+    
+    【処理フロー】
+    -----------
+    1. Record を取得（timer_state=2）
+    2. Team に紐づく Discord Integration を確認
+       - Bot Token が設定されているか？
+       - channel_id が設定されているか？
+    3. Discord API v10 に直接 POST リクエスト
+       - ライブラリ使わず requests で REST API 呼び出し
+    4. Embed フォーマットでメッセージ構築
+    5. 成功/失敗・エラーコードをログ出力
+    
+    【API エンドポイント】
+    ------------------
+    POST https://discord.com/api/v10/channels/{channel_id}/messages
+    
+    ヘッダー：
+      Authorization: Bot {token}
+      Content-Type: application/json
+    
+    ボディ：
+      {
+        "content": "テキスト",
+        "embeds": [{ ... }],
+        "allowed_mentions": {"parse": []}  # メンション防止
+      }
+    
+    【エラーハンドリング】
+    ------------------
+    429: レート制限
+      → 指数バックオフリトライで対応
+    403: 権限なし
+      → Embed / channel 削除 / Bot 削除 等
+      → 例外化して通知
+    404: チャンネルなし
+      → 例外化して通知
+    
+    その他 4xx/5xx: 例外化してリトライ
+    
+    【リトライ設定】
+    ---------------
+    Slack と同様、最大5回までリトライ。
+    
+    【戻り値】
+    --------
+    bool: 成功時 True、失敗時 False
     """
     rec = (
         Record.objects
@@ -332,21 +602,63 @@ def notify_discord_team(record_id: str) -> bool:
     logger.info(f"✅ Discord post ok: team={rec.team_id} channel={channel_id}")
     return True
 
-# ------------------------------
-# ディスパッチ（送信先を決めるのはここ一か所）
-# ------------------------------
+# ============================================================
+# 通知ディスパッチャー - 送信先を決定＆タスク選別
+# ============================================================
 @shared_task(name="record_notification.dispatch")
 def dispatch_record_notification(record_id: str) -> None:
+    """
+    【最重要関数】タスク実行の「分岐点」。
+    
+    【役割】
+    -------
+    1. Record を取得
+    2. Team の設定（notify_mode）を確認
+    3. 利用可能な通知方式を判定
+    4. 対応するタスクを Celery キューに追加
+    
+    【処理フロー】
+    -----------
+    dispatch_record_notification.delay(record_id)
+           ↓ (signals.py から呼ばれる)
+    _choose_modes(rec) で送信先を決定
+           ↓
+    対応タスクを .delay() で追加
+           ↓
+    実際の送信は別の Worker が実行
+    
+    【例】
+    -----
+    Team の notify_mode = 'auto'
+    利用可能：['slack', 'email', 'discord']
+    優先度：'slack,email,discord'
+    
+    → Slack が利用可能なので「Slack タスクのみ」追加
+    → メール・Discord タスクは追加しない
+    
+    【ログ出力】
+    -----------
+    ℹ️ 通知スキップ: 利用可能な通知方式がない
+    🚚 dispatch to: ['slack'] → 選定完了
+    
+    ※ 各タスク内では、さらに詳細なログが出力される
+    
+    【戻り値】
+    None（Celery タスク）
+    """
     rec = Record.objects.select_related("team").filter(pk=record_id, timer_state=2).first()
     if not rec or not rec.team:
         return
 
+    # 送信先を決定
     modes = _choose_modes(rec)
     if not modes:
         logger.info(f"ℹ️ 通知スキップ: no available provider (team={rec.team_id})")
         return
 
     logger.info(f"🚚 dispatch to: {modes}")
+    
+    # 決定した送信先ごとに、対応タスクを追加
     for m in modes:
         if m == "email":
             send_record_notification.delay(record_id)

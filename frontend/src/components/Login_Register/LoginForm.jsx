@@ -29,7 +29,9 @@ const LoginForm = ({onLoginSuccess,settoken,hc}) => {
       e.preventDefault()
       try {
         // ① fetch 実行
-        const res = await fetch(`${API_BASE}token/`, {
+        // Ensure base has no trailing slash so `${base}/token/` becomes `/api/token/` when VITE_API_BASE_URL === '/api'
+        const base = (API_BASE || '').replace(/\/$/, '');
+        const res = await fetch(`${base}/token/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',                     // Cookie 認証するなら必須

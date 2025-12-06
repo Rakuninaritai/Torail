@@ -37,18 +37,6 @@ export default function ScoutDetail({ conversation, onUpdateStatus, onReply, tem
           >
             既読
           </button>
-          <button
-            className="btn btn-outline-success"
-            onClick={() => onUpdateStatus(conversation.id, "返信あり")}
-          >
-            返信あり
-          </button>
-          <button
-            className="btn btn-outline-secondary"
-            onClick={() => onUpdateStatus(conversation.id, "辞退")}
-          >
-            辞退
-          </button>
         </div>
       </div>
 

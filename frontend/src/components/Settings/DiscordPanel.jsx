@@ -1,4 +1,18 @@
-// components/DiscordPanel.jsx
+// ============================================================
+// Discord 連携設定パネル - React コンポーネント
+// ============================================================
+//
+// 【役割】
+// -------
+// フロント側の Discord 連携設定 UI。
+// Slack パネルとほぼ同じだが、Discord API の細部が異なる。
+//
+// 【主な違い】
+// ---------
+// - Slack: App ごとに workspace 別トークン
+// - Discord: Bot Token は app 共通、guild/channel で分ける
+//
+
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { toast } from "react-toastify";
@@ -6,16 +20,21 @@ import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
 
 export default function DiscordPanel({ teamId, enabled }) {
+  // State 管理
   const [hydrating, setHydrating] = useState(true);
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [status, setStatus] = useState(null); // { guild:{name}, channel:{name} }
+  const [status, setStatus] = useState(null);
   const [channels, setChannels] = useState([]);
   const [selected, setSelected] = useState("");
 
   const BACKEND_ORIGIN = import.meta.env.VITE_BACKEND_ORIGIN || "http://localhost:8000";
 
   const fetchStatus = async () => {
+    /**
+     * Discord 接続状態を取得。
+     * Slack と同様。
+     */
     try {
       const data = await api(`/integrations/discord/status/?team_id=${teamId}`, { method: "GET" });
       if (data.ok && data.connected) {

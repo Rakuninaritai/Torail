@@ -4,7 +4,6 @@ export default function StatusBadge({ status }) {
   const map = {
     未読: { cls: "text-bg-warning", dot: "status-unread" },
     既読: { cls: "text-bg-secondary", dot: "status-read" },
-    "返信あり": { cls: "text-bg-success", dot: "status-replied" },
     辞退: { cls: "text-bg-danger", dot: "status-declined" },
   };
   const m = map[status] || map["既読"];
