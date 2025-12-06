@@ -18,6 +18,9 @@ const LogoutBtn = ({onLogoutSuccess}) => {
       })
       // console.log("ログアウト完了",data)
       toast.success("ログアウトが完了しました!")
+      // cookie に残っているトークンを念のため削除（HttpOnlyでなければ有効）
+      document.cookie = 'access_token=; Max-Age=0; path=/';
+      document.cookie = 'refresh_token=; Max-Age=0; path=/';
       setLoading(false)
       selectTeam(null)
       // チームを呼び出すことで空に

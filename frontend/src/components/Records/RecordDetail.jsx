@@ -322,7 +322,7 @@ const RecordDetail = ({cf,rec,token,teams}) => {
           <div className="d-flex gap-2 justify-content-end">
             {!isEditing ? (
               // 記録者が今見てるユーザーか
-              (token.pk==rec.user.id?(
+              ((Number(token?.id ?? token?.pk) === rec.user.id) ? (
                 <>
                 <button
                   type="button"

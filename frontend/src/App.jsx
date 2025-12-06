@@ -172,6 +172,21 @@ function App() {
     navigate('/');
     setToken(null);
   };
+  // Offcanvas（モバイル）でナビを押したら確実に閉じて遷移させる
+  const closeMobileNavAndGo = (to) => (e) => {
+    e.preventDefault();
+    navigate(to);
+    const el = document.getElementById('mobileNav');
+    if (!el) return;
+    try {
+      const inst = window?.bootstrap?.Offcanvas?.getInstance?.(el) || window?.bootstrap?.Offcanvas?.getOrCreateInstance?.(el);
+      inst?.hide();
+    } catch {
+      // fallback: remove class if bootstrap js is unavailable
+      el.classList.remove('show');
+      document.body.classList.remove('offcanvas-backdrop');
+    }
+  };
  const handleLoginSuccess = () => {
     setLogin(v => !v); // これで auth/user 再取得が走る
   };
@@ -335,9 +350,6 @@ function App() {
               <NavLink to="/company/settings" className={({isActive})=>isActive?'nav-link active':'nav-link'}>
                 <i className="bi bi-gear"></i> 会社設定
               </NavLink>
-              <NavLink to="/purchase" className={({isActive})=>isActive?'nav-link active':'nav-link'}>
-                <i className="bi bi-credit-card"></i> 購入テスト
-              </NavLink>
             </>
           ) : (
             <>
@@ -352,9 +364,6 @@ function App() {
               </NavLink>}
               {Token && <NavLink to={teamSlugPath('settings')} className={({isActive})=>isActive?'nav-link active':'nav-link'}>
                 <i className="bi bi-gear"></i> 設定・招待
-              </NavLink>}
-              {Token && <NavLink to="/purchase" className={({isActive})=>isActive?'nav-link active':'nav-link'}>
-                <i className="bi bi-credit-card"></i> 購入テスト
               </NavLink>}
             </>
           )}
@@ -422,21 +431,21 @@ function App() {
                 <NavLink
                   to="/company/dashboard"
                   className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-                  data-bs-dismiss="offcanvas"
+                  onClick={closeMobileNavAndGo('/company/dashboard')}
                 >
                   <i className="bi bi-speedometer2"></i> ダッシュボード
                 </NavLink>
                 <NavLink
                   to="/company/dmbox"
                   className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-                  data-bs-dismiss="offcanvas"
+                  onClick={closeMobileNavAndGo('/company/dmbox')}
                 >
                   <i className="bi bi-inbox"></i> DMbox
                 </NavLink>
                 <NavLink
                   to="/company/settings"
                   className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-                  data-bs-dismiss="offcanvas"
+                  onClick={closeMobileNavAndGo('/company/settings')}
                 >
                   <i className="bi bi-gear"></i> 会社設定
                 </NavLink>
@@ -447,7 +456,7 @@ function App() {
                   to={teamSlugPath('')}
                   end
                   className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-                  data-bs-dismiss="offcanvas"
+                  onClick={closeMobileNavAndGo(teamSlugPath(''))}
                 >
                   <i className="bi bi-house-door-fill"></i> ホーム
                 </NavLink>
@@ -455,7 +464,7 @@ function App() {
                   <NavLink
                     to={teamSlugPath('addrecords')}
                     className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-                    data-bs-dismiss="offcanvas"
+                    onClick={closeMobileNavAndGo(teamSlugPath('addrecords'))}
                   >
                     <i className="bi bi-journal-text"></i> 測定
                   </NavLink>
@@ -464,7 +473,7 @@ function App() {
                   <NavLink
                     to={teamSlugPath('records')}
                     className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-                    data-bs-dismiss="offcanvas"
+                    onClick={closeMobileNavAndGo(teamSlugPath('records'))}
                   >
                     <i className="bi bi-bar-chart-line-fill"></i> 統計
                   </NavLink>
@@ -473,7 +482,7 @@ function App() {
                   <NavLink
                     to={teamSlugPath('settings')}
                     className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-                    data-bs-dismiss="offcanvas"
+                    onClick={closeMobileNavAndGo(teamSlugPath('settings'))}
                   >
                     <i className="bi bi-gear"></i> 設定・招待
                   </NavLink>
