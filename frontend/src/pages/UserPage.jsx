@@ -316,7 +316,7 @@ export default function UserPage({ token }) {
       <div className="page-header mb-3">
         <i className="bi bi-person-circle fs-4" />
         <h1 className="title h4 mb-0">マイページ</h1>
-        <span className="subtle ms-1">自己PR・継続可視化</span>
+        {/* <span className="subtle ms-1">自己PR・継続可視化</span> */}
       </div>
 
       <HeaderCard profile={profile} isOwner={isOwner} onSave={saveProfile} onAddSns={addSns} onRemoveSns={removeSns} saving={saving} />

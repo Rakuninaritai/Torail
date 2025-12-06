@@ -10,6 +10,13 @@ export default function HeaderCard({ profile, isOwner, onSave, onAddSns, onRemov
   const previewUrlRef = useRef(null);
 
   useEffect(() => setDraft(profile), [profile]);
+  
+  // アバター表示用イニシャルを計算
+  const getInitials = (displayName) => {
+    return (displayName || "?").slice(0, 2).toUpperCase();
+  };
+  const hasAvatar = !!(draft?.avatarUrl && draft.avatarUrl.trim());
+  const initials = getInitials(draft?.displayName);
   const GRADE_OPTIONS = [
   { value: "",  label: "—" },
   { value: "1", label: "1年" },
@@ -76,12 +83,22 @@ const gradeLabel = (v) => GRADE_OPTIONS.find(o => o.value === v)?.label || "—"
     <section className="torail-card mb-4">
       <div className="d-flex align-items-center gap-3 flex-wrap">
         <div className="position-relative">
-          <img
-            src={draft.avatarUrl || "https://placehold.co/144x144/png"}
-            className="avatar"
-            alt="avatar"
-            onClick={() => editing && fileRef.current?.click()}
-          />
+          {hasAvatar ? (
+            <img
+              src={draft.avatarUrl}
+              className="avatar"
+              alt="avatar"
+              onClick={() => editing && fileRef.current?.click()}
+            />
+          ) : (
+            <div
+              className="avatar avatar-fallback"
+              onClick={() => editing && fileRef.current?.click()}
+              style={{ cursor: editing ? 'pointer' : 'default' }}
+            >
+              {initials}
+            </div>
+          )}
           {isOwner && editing && (
             <>
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={pickAvatar} />
